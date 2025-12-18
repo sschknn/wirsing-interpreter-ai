@@ -15,10 +15,19 @@ export interface TranscriptEntry {
   timestamp: number;
 }
 
+export interface SmartSuggestion {
+  id: string;
+  type: 'clarification' | 'insight' | 'action';
+  text: string;
+  reason: string;
+  timestamp: number;
+}
+
 export interface SecretaryState {
   isActive: boolean;
   transcript: TranscriptEntry[];
   board: BoardItem[];
+  suggestions: SmartSuggestion[];
   isThinking: boolean;
 }
 
@@ -28,6 +37,7 @@ export enum Priority {
   LOW = 'niedrig'
 }
 
+// Added missing Task interface
 export interface Task {
   id: string;
   title: string;
@@ -37,28 +47,43 @@ export interface Task {
   completed: boolean;
 }
 
-export interface Project {
-  name: string;
-  subtasks: string[];
-}
-
-export interface ThoughtList {
-  title: string;
-  type: 'Einkauf' | 'Ideen' | 'Notizen';
-  items: string[];
-}
-
+// Added missing ParsedData interface
 export interface ParsedData {
   tasks: Task[];
-  projects: Project[];
-  lists: ThoughtList[];
+  projects: {
+    name: string;
+    subtasks: string[];
+  }[];
+  lists: {
+    title: string;
+    type: 'Einkauf' | 'Ideen' | 'Notizen';
+    items: string[];
+  }[];
   summary: string;
+}
+
+export interface SlideType {
+  type: 'strategy' | 'tasks' | 'ideas' | 'problems' | 'summary' | 'suggestions' | 'custom';
+}
+
+export interface SlideItem {
+  text: string;
+  subItems?: string[];
+  category?: string;
+  priority?: Priority;
+}
+
+export interface Insight {
+  title: string;
+  description: string;
+  sourceUrl?: string;
 }
 
 export interface Slide {
   title: string;
-  points: string[];
-  type: 'strategy' | 'tasks' | 'ideas' | 'problems' | 'summary';
+  items: SlideItem[];
+  type: SlideType['type'];
+  insights?: Insight[];
 }
 
 export interface PresentationData {

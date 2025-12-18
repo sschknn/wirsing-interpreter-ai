@@ -2,6 +2,7 @@
   "name": "Live AI Voice Secretary",
   "description": "A real-time AI assistant that listens, transcribes, and organizes your thoughts into a structured dashboard automatically.",
   "requestFramePermissions": [
-    "microphone"
+    "microphone",
+    "geolocation"
   ]
 }

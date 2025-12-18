@@ -1,45 +1,33 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality, Type, FunctionDeclaration } from '@google/genai';
-import { BoardItem, BoardCategory, SecretaryState, PresentationData } from './types';
-import { MicIcon, TrashIcon, HistoryIcon, CheckIcon, PencilIcon } from './components/Icons';
-import { parseThoughts } from './services/geminiService';
+import { PresentationData, SecretaryState, SmartSuggestion, SlideItem } from './types';
+import { MicIcon, SparklesIcon, CheckIcon, PresentationIcon, HistoryIcon, TrashIcon } from './components/Icons';
 import LiveBriefingPanel from './components/LiveBriefingPanel';
+import PresentationViewer from './components/PresentationViewer';
 
-// Audio Encoding/Decoding Utilities
+// Audio Utilities
 function encode(bytes: Uint8Array) {
   let binary = '';
   const len = bytes.byteLength;
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
+  for (let i = 0; i < len; i++) binary += String.fromCharCode(bytes[i]);
   return btoa(binary);
 }
 
 function decode(base64: string) {
   const binaryString = atob(base64);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
   return bytes;
 }
 
-async function decodeAudioData(
-  data: Uint8Array,
-  ctx: AudioContext,
-  sampleRate: number,
-  numChannels: number,
-): Promise<AudioBuffer> {
+async function decodeAudioData(data: Uint8Array, ctx: AudioContext, sampleRate: number, numChannels: number): Promise<AudioBuffer> {
   const dataInt16 = new Int16Array(data.buffer);
   const frameCount = dataInt16.length / numChannels;
   const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
   for (let channel = 0; channel < numChannels; channel++) {
     const channelData = buffer.getChannelData(channel);
-    for (let i = 0; i < frameCount; i++) {
-      channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
-    }
+    for (let i = 0; i < frameCount; i++) channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
   }
   return buffer;
 }
@@ -47,118 +35,196 @@ async function decodeAudioData(
 function resample(data: Float32Array, fromRate: number, toRate: number): Float32Array {
   if (fromRate === toRate) return data;
   const ratio = fromRate / toRate;
-  const newLength = Math.floor(data.length / ratio);
-  const result = new Float32Array(newLength);
-  for (let i = 0; i < newLength; i++) {
-    result[i] = data[Math.floor(i * ratio)];
-  }
+  const result = new Float32Array(Math.floor(data.length / ratio));
+  for (let i = 0; i < result.length; i++) result[i] = data[Math.floor(i * ratio)];
   return result;
 }
 
-const CATEGORIES: BoardCategory[] = [
-  'Aufgaben', 'Ideen', 'Probleme', 'Lösungen', 'Entscheidungen', 'Offene Fragen', 'Notizen', 'To-Dos'
-];
-
-const updateBoardFunctionDeclaration: FunctionDeclaration = {
-  name: 'update_secretary_board',
+const updatePresentationTool: FunctionDeclaration = {
+  name: 'update_live_presentation',
   parameters: {
     type: Type.OBJECT,
-    description: 'Füge eine neue Notiz, Aufgabe oder Information zum strukturierten Board hinzu. Optimiere den Inhalt proaktiv.',
+    description: 'Aktualisiere das Live Executive Briefing basierend auf den Gedanken und Aufgaben des Nutzers.',
     properties: {
-      category: { type: Type.STRING, enum: CATEGORIES },
-      content: { type: Type.STRING, description: 'Der strukturierte, bereinigte und ggf. proaktiv erweiterte Inhalt.' }
+      title: { type: Type.STRING, description: 'Der Hauptfokus oder Titel des aktuellen Briefings.' },
+      subtitle: { type: Type.STRING, description: 'Zeitraum oder Status-Update.' },
+      slides: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            title: { type: Type.STRING, description: 'Kategorie oder Projektname.' },
+            type: { type: Type.STRING, enum: ['strategy', 'tasks', 'ideas', 'problems', 'summary', 'suggestions', 'custom'] },
+            items: { 
+              type: Type.ARRAY, 
+              items: { 
+                type: Type.OBJECT,
+                properties: {
+                  text: { type: Type.STRING, description: 'Hauptpunkt oder Hauptaufgabe.' },
+                  subItems: { type: Type.ARRAY, items: { type: Type.STRING }, description: 'Unteraufgaben oder Details (optional).' },
+                  category: { type: Type.STRING, description: 'Spezifische Kategorie zur farblichen Hervorhebung (optional).' }
+                },
+                required: ['text']
+              }
+            },
+            insights: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  description: { type: Type.STRING },
+                  sourceUrl: { type: Type.STRING }
+                }
+              }
+            }
+          },
+          required: ['title', 'type', 'items']
+        }
+      }
     },
-    required: ['category', 'content'],
+    required: ['title', 'subtitle', 'slides'],
+  },
+};
+
+const smartSuggestionTool: FunctionDeclaration = {
+  name: 'provide_smart_suggestion',
+  parameters: {
+    type: Type.OBJECT,
+    description: 'Biete eine proaktive intelligente Empfehlung oder Rückfrage an.',
+    properties: {
+      text: { type: Type.STRING, description: 'Die Empfehlung oder Frage an den Nutzer.' },
+      type: { type: Type.STRING, enum: ['clarification', 'insight', 'action'], description: 'Art der Empfehlung.' },
+      reason: { type: Type.STRING, description: 'Warum diese Empfehlung gerade relevant ist.' }
+    },
+    required: ['text', 'type', 'reason'],
   },
 };
 
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'live' | 'manual'>('live');
-  const [state, setState] = useState<SecretaryState>({
-    isActive: false,
-    transcript: [],
-    board: [],
-    isThinking: false
+  const [isCreativeMode, setIsCreativeMode] = useState(false);
+  const [isPresenting, setIsPresenting] = useState(false);
+  const [state, setState] = useState<SecretaryState>(() => {
+    const saved = localStorage.getItem('secretary_state');
+    return saved ? JSON.parse(saved) : { isActive: false, transcript: [], board: [], suggestions: [], isThinking: false };
   });
   
-  const [manualText, setManualText] = useState('');
-  const [isParsingManual, setIsParsingManual] = useState(false);
-  const [isGeneratingBriefing, setIsGeneratingBriefing] = useState(false);
-  const [briefingData, setBriefingData] = useState<PresentationData | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState('');
+  const [briefingData, setBriefingData] = useState<PresentationData | null>(() => {
+    const saved = localStorage.getItem('briefing_data');
+    return saved ? JSON.parse(saved) : null;
+  });
 
+  const [completedPoints, setCompletedPoints] = useState<Set<string>>(() => {
+    const saved = localStorage.getItem('completed_points');
+    return saved ? new Set(JSON.parse(saved)) : new Set();
+  });
+
+  const [showCelebration, setShowCelebration] = useState(false);
   const [volume, setVolume] = useState(0);
+
   const sessionRef = useRef<any>(null);
   const audioContextInRef = useRef<AudioContext | null>(null);
   const audioContextOutRef = useRef<AudioContext | null>(null);
   const nextStartTimeRef = useRef(0);
   const audioSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
-  const transcriptEndRef = useRef<HTMLDivElement>(null);
   const currentInputTranscription = useRef('');
   const currentOutputTranscription = useRef('');
 
-  // Auto-refresh logic for the Live Presentation on the right
   useEffect(() => {
-    if (state.board.length === 0) return;
-    const timer = setTimeout(() => refreshBriefing(), 2500);
-    return () => clearTimeout(timer);
-  }, [state.board.length]);
+    localStorage.setItem('secretary_state', JSON.stringify({ ...state, isActive: false }));
+  }, [state.transcript, state.suggestions]);
 
   useEffect(() => {
-    const savedBoard = localStorage.getItem('secretary_board');
-    if (savedBoard) setState(prev => ({ ...prev, board: JSON.parse(savedBoard) }));
-  }, []);
+    localStorage.setItem('briefing_data', JSON.stringify(briefingData));
+  }, [briefingData]);
 
   useEffect(() => {
-    localStorage.setItem('secretary_board', JSON.stringify(state.board));
-  }, [state.board]);
+    localStorage.setItem('completed_points', JSON.stringify(Array.from(completedPoints)));
+  }, [completedPoints]);
 
-  useEffect(() => {
-    transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [state.transcript]);
-
-  const handleManualParse = async () => {
-    if (!manualText.trim() || isParsingManual) return;
-    setIsParsingManual(true);
-    try {
-      const data = await parseThoughts(manualText);
-      const newItems: BoardItem[] = [];
-      data.tasks.forEach(task => {
-        newItems.push({
-          id: task.id || crypto.randomUUID(),
-          category: 'Aufgaben',
-          content: `${task.title} (Priorität: ${task.priority})${task.deadline ? ` • Fällig: ${task.deadline}` : ''}`,
-          timestamp: Date.now()
-        });
-      });
-      data.projects.forEach(project => {
-        newItems.push({
-          id: crypto.randomUUID(),
-          category: 'Ideen',
-          content: `Projekt: ${project.name}\nSchritte: ${project.subtasks.join(', ')}`,
-          timestamp: Date.now()
-        });
-      });
-      setState(prev => ({ ...prev, board: [...newItems, ...prev.board] }));
-      setManualText('');
-      setActiveTab('live');
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsParsingManual(false);
+  const resetData = () => {
+    if (confirm("Möchten Sie alle aktuellen Daten löschen?")) {
+      setState({ isActive: false, transcript: [], board: [], suggestions: [], isThinking: false });
+      setBriefingData(null);
+      setCompletedPoints(new Set());
+      localStorage.clear();
     }
   };
 
-  const startSession = async () => {
+  const triggerCelebration = () => {
+    setShowCelebration(true);
+    setTimeout(() => setShowCelebration(false), 2000);
+  };
+
+  const handleTogglePoint = (pointId: string) => {
+    setCompletedPoints(prev => {
+      const next = new Set(prev);
+      if (next.has(pointId)) {
+        next.delete(pointId);
+      } else {
+        next.add(pointId);
+        triggerCelebration();
+      }
+      return next;
+    });
+  };
+
+  const handleUpdateTask = (slideIdx: number, itemIdx: number, updatedItem: SlideItem) => {
+    if (!briefingData) return;
+    const newData = { ...briefingData };
+    const newSlides = [...newData.slides];
+    const newItems = [...newSlides[slideIdx].items];
+    newItems[itemIdx] = updatedItem;
+    newSlides[slideIdx] = { ...newSlides[slideIdx], items: newItems };
+    newData.slides = newSlides;
+    setBriefingData(newData);
+  };
+
+  const refineText = async (text: string): Promise<string> => {
+    if (!text.trim() || text.length < 5) return text;
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: { parts: [{ text: `Original: "${text}"` }] },
+        config: { 
+          systemInstruction: `Du bist ein hochpräziser linguistischer Editor für transkribierte Sprache.
+          Deine Aufgabe:
+          1. Entferne strikt alle Füllwörter (z.B. "ähm", "äh", "halt", "sozusagen", "quasi", "einfach", "eigentlich", "irgendwie", "mal", "ja").
+          2. Bereinige Satzabbrüche, Wiederholungen und Fehlstarts.
+          3. Maximiere die syntaktische Klarheit und Lesbarkeit, ohne den sachlichen Kern oder den Tonfall der Nachricht zu verfälschen.
+          4. Verwandle fragmentierte Gedanken in flüssige, grammatikalisch korrekte Sätze.
+          5. Antworte AUSSCHLIESSLICH mit dem bereinigten Text. Keine Erklärungen.`,
+          thinkingConfig: { thinkingBudget: 0 }
+        }
+      });
+      return response.text?.trim() || text;
+    } catch (e) { return text; }
+  };
+
+  const startSession = async (modeOverride?: boolean) => {
+    const activeMode = modeOverride !== undefined ? modeOverride : isCreativeMode;
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({sampleRate: 16000});
-      const outputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({sampleRate: 24000});
+      const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const outputCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
       audioContextInRef.current = inputCtx;
       audioContextOutRef.current = outputCtx;
       
+      const passiveInstruction = `Du bist die 'Silent Executive Assistant'.
+      - Du sprichst NIEMALS. Nutze Tool-Calls 'update_live_presentation' und 'provide_smart_suggestion'.
+      - Gruppiere Aufgaben hierarchisch.
+      - Nutze 'provide_smart_suggestion', wenn du eine wichtige Lücke in der Planung siehst oder eine Klärung brauchst.
+      - Wenn der Nutzer nach Fakten fragt, nutze Grounding für exakte Daten.
+      - Aktualisiere das Briefing-Board kontinuierlich.`;
+
+      const creativeInstruction = `Du bist die 'Creative Brainstorming Engine'.
+      - Sei aktiv, sprich mit dem Nutzer.
+      - Nutze 'provide_smart_suggestion', um das Gespräch zu lenken oder tiefergehende Fragen zu stellen.
+      - Hilf beim Strukturieren von wilden Ideen.
+      - Nutze Tool-Calls für das visuelle Board parallel zum Gespräch.`;
+
       const sessionPromise = ai.live.connect({
         model: 'gemini-2.5-flash-native-audio-preview-09-2025',
         callbacks: {
@@ -166,25 +232,22 @@ const App: React.FC = () => {
             const source = inputCtx.createMediaStreamSource(stream);
             const scriptProcessor = inputCtx.createScriptProcessor(4096, 1, 1);
             scriptProcessor.onaudioprocess = (e) => {
-              const inputData = e.inputBuffer.getChannelData(0);
+              if (inputCtx.state === 'closed') return;
+              const inputData = resample(e.inputBuffer.getChannelData(0), inputCtx.sampleRate, 16000);
               let sum = 0;
               for(let i=0; i<inputData.length; i++) sum += inputData[i] * inputData[i];
               setVolume(Math.sqrt(sum / inputData.length));
               const int16 = new Int16Array(inputData.length);
               for (let i = 0; i < inputData.length; i++) int16[i] = inputData[i] * 32768;
-              sessionPromise.then(session => {
-                session.sendRealtimeInput({ 
-                  media: { data: encode(new Uint8Array(int16.buffer)), mimeType: 'audio/pcm;rate=16000' } 
-                });
-              });
+              sessionPromise.then(s => s.sendRealtimeInput({ media: { data: encode(new Uint8Array(int16.buffer)), mimeType: 'audio/pcm;rate=16000' } }));
             };
             source.connect(scriptProcessor);
             scriptProcessor.connect(inputCtx.destination);
             setState(prev => ({ ...prev, isActive: true }));
           },
-          onmessage: async (message: LiveServerMessage) => {
-            const audioData = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
-            if (audioData && outputCtx) {
+          onmessage: async (msg: LiveServerMessage) => {
+            const audioData = msg.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
+            if (audioData && outputCtx && outputCtx.state !== 'closed') {
               nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outputCtx.currentTime);
               const buffer = await decodeAudioData(decode(audioData), outputCtx, 24000, 1);
               const source = outputCtx.createBufferSource();
@@ -194,49 +257,66 @@ const App: React.FC = () => {
               nextStartTimeRef.current += buffer.duration;
               audioSourcesRef.current.add(source);
             }
-            if (message.serverContent?.interrupted) {
-              audioSourcesRef.current.forEach(s => s.stop());
-              audioSourcesRef.current.clear();
-              nextStartTimeRef.current = 0;
+
+            if (msg.serverContent?.inputTranscription) {
+              currentInputTranscription.current += msg.serverContent.inputTranscription.text;
+            } else if (msg.serverContent?.outputTranscription) {
+              currentOutputTranscription.current += msg.serverContent.outputTranscription.text;
             }
-            if (message.serverContent?.inputTranscription) currentInputTranscription.current += message.serverContent.inputTranscription.text;
-            else if (message.serverContent?.outputTranscription) currentOutputTranscription.current += message.serverContent.outputTranscription.text;
-            
-            if (message.serverContent?.turnComplete) {
-              if (currentInputTranscription.current) { addTranscriptEntry('user', currentInputTranscription.current); currentInputTranscription.current = ''; }
-              if (currentOutputTranscription.current) { addTranscriptEntry('assistant', currentOutputTranscription.current); currentOutputTranscription.current = ''; }
+
+            if (msg.serverContent?.turnComplete) {
+              const rawInput = currentInputTranscription.current;
+              const output = currentOutputTranscription.current;
+              currentInputTranscription.current = '';
+              currentOutputTranscription.current = '';
+
+              if (rawInput) {
+                const refinedInput = await refineText(rawInput);
+                setState(prev => ({
+                  ...prev,
+                  transcript: [
+                    ...prev.transcript,
+                    { id: crypto.randomUUID(), role: 'user', text: refinedInput, timestamp: Date.now() }
+                  ]
+                }));
+              }
+              if (output) {
+                setState(prev => ({
+                  ...prev,
+                  transcript: [
+                    ...prev.transcript,
+                    { id: crypto.randomUUID(), role: 'assistant', text: output, timestamp: Date.now() }
+                  ]
+                }));
+              }
             }
-            if (message.toolCall) {
-              for (const fc of message.toolCall.functionCalls) {
-                if (fc.name === 'update_secretary_board') {
-                  const { category, content } = fc.args as any;
-                  addBoardItem(category, content);
-                  sessionPromise.then(s => s.sendToolResponse({ 
-                    functionResponses: { id: fc.id, name: fc.name, response: { result: "Bestätigt und strukturiert." } } 
-                  }));
+
+            if (msg.toolCall) {
+              for (const fc of msg.toolCall.functionCalls) {
+                if (fc.name === 'update_live_presentation') {
+                  setBriefingData(fc.args as any as PresentationData);
+                  sessionPromise.then(s => s.sendToolResponse({ functionResponses: { id: fc.id, name: fc.name, response: { result: "Briefing aktualisiert." } } }));
+                } else if (fc.name === 'provide_smart_suggestion') {
+                  const sugg = { ...fc.args, id: crypto.randomUUID(), timestamp: Date.now() } as SmartSuggestion;
+                  setState(prev => ({ ...prev, suggestions: [sugg, ...prev.suggestions].slice(0, 10) }));
+                  sessionPromise.then(s => s.sendToolResponse({ functionResponses: { id: fc.id, name: fc.name, response: { result: "Empfehlung empfangen." } } }));
                 }
               }
             }
           },
-          onclose: () => stopSession(),
-          onerror: (e) => stopSession()
+          onerror: (e) => console.error("Live API Error:", e),
+          onclose: () => stopSession()
         },
         config: {
           responseModalities: [Modality.AUDIO],
           inputAudioTranscription: {},
           outputAudioTranscription: {},
-          tools: [{ functionDeclarations: [updateBoardFunctionDeclaration] }],
+          tools: [
+            { functionDeclarations: [updatePresentationTool, smartSuggestionTool] }, 
+            { googleSearch: {} }
+          ],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } },
-          systemInstruction: `Du bist die intelligente Live-KI-Sekretärin. Dein Modus ist der "Live-World-State".
-          
-          DEINE AUFGABEN:
-          1. Live-Mitschrift: Höre in Echtzeit zu. Entferne Füllwörter und Chaos. Formuliere professionell.
-          2. Auto-Strukturierung: Ordne ALLES in Kategorien (Aufgaben, Ideen, Probleme, Entscheidungen).
-          3. Proaktives Denken: Wenn der Nutzer eine Idee nennt, baue sie logisch aus. Erstelle Checklisten und Pläne.
-          4. Aufgaben-Generator: Wandle alles in klare "Was? Wie? Warum? Bis wann?"-To-Dos um.
-          5. Intelligente Optimierung: Markiere Unklarheiten und schlage Verbesserungen vor.
-          
-          Du arbeitest dauerhaft mit. Nutze 'update_secretary_board' für jede relevante Erkenntnis.`
+          systemInstruction: activeMode ? creativeInstruction : passiveInstruction
         }
       });
       sessionRef.current = sessionPromise;
@@ -244,196 +324,203 @@ const App: React.FC = () => {
   };
 
   const stopSession = () => {
-    audioContextInRef.current?.close();
-    audioContextOutRef.current?.close();
-    sessionRef.current?.then((s: any) => s.close());
-    sessionRef.current = null;
+    if (audioContextInRef.current && audioContextInRef.current.state !== 'closed') {
+      audioContextInRef.current.close().catch(console.error);
+    }
+    if (audioContextOutRef.current && audioContextOutRef.current.state !== 'closed') {
+      audioContextOutRef.current.close().catch(console.error);
+    }
+    sessionRef.current?.then((s: any) => {
+        try { s.close(); } catch(e) {}
+    });
+    audioSourcesRef.current.forEach(source => {
+      try { source.stop(); } catch(e) {}
+    });
+    audioSourcesRef.current.clear();
     setState(prev => ({ ...prev, isActive: false }));
     setVolume(0);
+    nextStartTimeRef.current = 0;
   };
 
-  const addTranscriptEntry = (role: 'user' | 'assistant', text: string) => {
-    setState(prev => ({ ...prev, transcript: [...prev.transcript, { id: crypto.randomUUID(), role, text, timestamp: Date.now() }].slice(-50) }));
-  };
-
-  const addBoardItem = (category: BoardCategory, content: string) => {
-    setState(prev => ({ ...prev, board: [{ id: crypto.randomUUID(), category, content, timestamp: Date.now() }, ...prev.board] }));
-  };
-
-  const startEditing = (id: string, content: string) => { setEditingId(id); setEditValue(content); };
-  const saveEdit = () => {
-    if (!editingId) return;
-    setState(prev => ({ ...prev, board: prev.board.map(item => item.id === editingId ? { ...item, content: editValue } : item) }));
-    setEditingId(null);
-  };
-
-  const refreshBriefing = async () => {
-    if (state.board.length === 0 || isGeneratingBriefing) return;
-    setIsGeneratingBriefing(true);
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const boardContent = state.board.map(i => `[${i.category}] ${i.content}`).join('\n');
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: { parts: [{ text: `Aktualisiere das proaktive Strategie-Briefing basierend auf:\n${boardContent}` }] },
-        config: {
-          systemInstruction: `Du bist ein Senior-Berater und Sekretär. Erstelle eine Live-Präsentation (Folie).
-          
-          STRUKTURREGELN FÜR SLIDES:
-          - Slide 1: "Executive Summary" - Professionelle Zusammenfassung.
-          - Slide 2: "Tasks & Action Items" - MUSS zwei Sektionen haben: "What needs to be done" (sofort) und "Future tasks" (geplant).
-          - Slide 3: "Ideas & Vision" - MUSS enthalten: "What would be a good idea" (deine proaktiven Vorschläge und Erweiterungen).
-          - Slide 4: "Challenges & Blockers" - Erkannte Probleme und Risiken.
-          - Slide 5: "Next Steps & Roadmap".
-          
-          Verwende klare Unterüberschriften in den Bulletpoints (z.B. "ZUKUNFT: Punkt"). Formuliere alles als ausführbare Strategie.`,
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              title: { type: Type.STRING },
-              subtitle: { type: Type.STRING },
-              slides: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    title: { type: Type.STRING },
-                    type: { type: Type.STRING, enum: ['strategy', 'tasks', 'ideas', 'problems', 'summary'] },
-                    points: { type: Type.ARRAY, items: { type: Type.STRING } }
-                  },
-                  required: ['title', 'type', 'points']
-                }
-              }
-            },
-            required: ['title', 'subtitle', 'slides']
-          }
-        }
-      });
-      if (response.text) {
-        setBriefingData(JSON.parse(response.text) as PresentationData);
-      }
-    } catch (e) { console.error("Briefing failed", e); }
-    finally { setIsGeneratingBriefing(false); }
+  const toggleCreativeMode = () => {
+    const wasActive = state.isActive;
+    if (wasActive) stopSession();
+    setIsCreativeMode(!isCreativeMode);
+    if (wasActive) setTimeout(() => startSession(!isCreativeMode), 300);
   };
 
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-200 font-sans flex h-screen overflow-hidden selection:bg-indigo-500/30">
+    <div className="min-h-screen bg-[#020617] text-slate-200 font-sans flex h-screen overflow-hidden relative">
       
-      {/* 1. SPALTE: SIDEBAR */}
-      <aside className="w-20 lg:w-64 border-r border-white/5 bg-slate-950/50 flex flex-col shrink-0">
-        <div className="p-6 border-b border-white/5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-600/20">
-              <CheckIcon className="w-6 h-6" />
-            </div>
-            <div className="hidden lg:block">
-              <h1 className="text-lg font-black text-white leading-none">Secretary</h1>
-              <span className="text-[10px] font-black uppercase text-indigo-500 tracking-widest">PRO ENGINE</span>
-            </div>
-          </div>
-        </div>
-        <nav className="p-4 space-y-2 flex-1">
-          <button onClick={() => setActiveTab('live')} className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${activeTab === 'live' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/30' : 'text-slate-500 hover:bg-white/5'}`}>
-            <MicIcon className="w-5 h-5" /> <span className="hidden lg:inline">Live Mode</span>
-          </button>
-          <button onClick={() => setActiveTab('manual')} className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${activeTab === 'manual' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/30' : 'text-slate-500 hover:bg-white/5'}`}>
-            <HistoryIcon className="w-5 h-5" /> <span className="hidden lg:inline">Input</span>
-          </button>
-        </nav>
-        <div className="p-6 border-t border-white/5">
-          <button onClick={state.isActive ? stopSession : startSession} className={`w-full py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] transition-all ${state.isActive ? 'bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500 hover:text-white' : 'bg-white text-black hover:bg-slate-200'}`}>
-            {state.isActive ? 'Stop' : 'Start'}
-          </button>
-        </div>
-      </aside>
+      {isPresenting && briefingData && (
+        <PresentationViewer data={briefingData} onClose={() => setIsPresenting(false)} />
+      )}
 
-      {/* 2. SPALTE: WORKSPACE */}
-      <main className="flex-1 flex flex-col overflow-hidden bg-slate-900/10 border-r border-white/5">
-        <header className="h-20 border-b border-white/5 flex items-center justify-between px-10 bg-slate-950/20">
-          <h2 className="text-xs font-black uppercase tracking-[0.3em] text-slate-500">Workspace / {activeTab}</h2>
-          <button onClick={() => setState(prev => ({...prev, board: []}))} className="p-3 bg-white/5 hover:bg-red-500/20 hover:text-red-400 rounded-xl transition-all border border-white/5">
-            <TrashIcon className="w-4 h-4" />
-          </button>
-        </header>
-
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Transcript/Input Area */}
-          <div className="h-1/2 border-b border-white/5 bg-slate-950/20 flex flex-col overflow-hidden">
-            <div className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar">
-              {activeTab === 'live' ? (
-                <>
-                  {state.transcript.map(entry => (
-                    <div key={entry.id} className={`flex flex-col ${entry.role === 'user' ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2`}>
-                      <div className={`max-w-[85%] p-5 rounded-3xl text-sm leading-relaxed border ${entry.role === 'user' ? 'bg-indigo-600/10 border-indigo-500/20 text-indigo-100' : 'bg-slate-800/50 border-white/5 text-slate-300'}`}>
-                        <span className="text-[10px] font-black uppercase opacity-30 mb-1.5 block">{entry.role === 'user' ? 'Du' : 'KI-Sekretärin'}</span>
-                        {entry.text}
-                      </div>
-                    </div>
-                  ))}
-                  <div ref={transcriptEndRef} />
-                </>
-              ) : (
-                <div className="h-full flex flex-col gap-5">
-                  <textarea value={manualText} onChange={e => setManualText(e.target.value)} placeholder="Schreibe hier deine Gedanken..." className="flex-1 bg-white/5 border border-white/10 rounded-3xl p-6 text-slate-200 outline-none focus:ring-1 ring-indigo-500/50 transition-all resize-none text-sm leading-relaxed" />
-                  <button onClick={handleManualParse} disabled={isParsingManual || !manualText.trim()} className="py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em]">
-                    {isParsingManual ? 'Analyse...' : 'Strukturieren'}
-                  </button>
-                </div>
-              )}
-            </div>
-            {/* Visualizer */}
-            <div className="h-1 bg-white/5">
-              <div className="h-full bg-indigo-500 transition-all duration-75 shadow-[0_0_10px_rgba(99,102,241,0.5)]" style={{ width: `${Math.min(volume * 800, 100)}%` }}></div>
-            </div>
-          </div>
-
-          {/* Board Area */}
-          <div className="flex-1 overflow-y-auto p-10 bg-slate-950/30 custom-scrollbar">
-            <div className="max-w-4xl mx-auto space-y-12">
-               {CATEGORIES.map(cat => {
-                 const items = state.board.filter(i => i.category === cat);
-                 if (items.length === 0) return null;
-                 return (
-                   <section key={cat} className="animate-in fade-in slide-in-from-bottom-4">
-                      <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mb-6 flex items-center gap-4">
-                        {cat} <div className="h-px bg-white/5 flex-1"></div>
-                      </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {items.map(item => (
-                          <div key={item.id} className={`group bg-slate-900/40 border border-white/5 p-5 rounded-[2rem] hover:bg-slate-900/70 transition-all relative ${editingId === item.id ? 'ring-2 ring-indigo-500 bg-slate-900' : 'hover:border-indigo-500/30'}`}>
-                             <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
-                                <button onClick={() => startEditing(item.id, item.content)} className="p-2 hover:bg-white/10 rounded-xl text-slate-500 transition-all"><PencilIcon className="w-4 h-4" /></button>
-                                <button onClick={() => setState(p => ({...p, board: p.board.filter(i => i.id !== item.id)}))} className="p-2 hover:bg-red-500/20 hover:text-red-400 rounded-xl transition-all"><TrashIcon className="w-4 h-4" /></button>
-                             </div>
-                             {editingId === item.id ? (
-                               <textarea autoFocus value={editValue} onChange={e => setEditValue(e.target.value)} onBlur={saveEdit} onKeyDown={e => { if(e.key === 'Enter' && (e.ctrlKey || e.metaKey)) saveEdit(); }} className="w-full bg-transparent text-sm font-medium outline-none resize-none leading-relaxed min-h-[80px]" />
-                             ) : (
-                               <p className="text-sm font-medium text-slate-300 pr-12 leading-relaxed whitespace-pre-wrap">{item.content}</p>
-                             )}
-                          </div>
-                        ))}
-                      </div>
-                   </section>
-                 )
-               })}
-            </div>
-          </div>
-        </div>
-      </main>
-
-      {/* 3. SPALTE: LIVE PRESENTATION */}
-      <aside className="w-[450px] 2xl:w-[550px] shrink-0 h-full flex flex-col shadow-2xl z-10">
-        <LiveBriefingPanel data={briefingData} isLoading={isGeneratingBriefing} />
-      </aside>
-
-      {/* Listening Indicator */}
-      {state.isActive && (
-        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-indigo-600 text-white px-10 py-4 rounded-full shadow-[0_10px_40px_rgba(79,70,229,0.5)] flex items-center gap-4 animate-bounce z-[100] border border-white/20">
-           <div className="w-3 h-3 bg-white rounded-full animate-pulse shadow-[0_0_10px_white]"></div>
-           <span className="text-xs font-black uppercase tracking-[0.3em]">Listening Mode Active</span>
+      {showCelebration && (
+        <div className="fixed inset-0 pointer-events-none z-[200] flex items-center justify-center overflow-hidden">
+          {[...Array(24)].map((_, i) => (
+            <div 
+              key={i} 
+              className="absolute w-2 h-2 rounded-full animate-celebration-particle" 
+              style={{
+                backgroundColor: ['#6366f1', '#a855f7', '#10b981', '#f59e0b', '#ec4899'][i % 5],
+                left: '50%',
+                top: '50%',
+                '--tx': `${(Math.random() - 0.5) * 800}px`,
+                '--ty': `${(Math.random() - 0.5) * 800}px`,
+                animationDelay: `${Math.random() * 0.3}s`
+              } as any}
+            />
+          ))}
         </div>
       )}
+
+      {/* SIDEBAR */}
+      <aside className="w-20 lg:w-80 border-r border-white/5 bg-slate-950/50 backdrop-blur-3xl flex flex-col shrink-0 z-50 transition-all duration-300">
+        <div className="p-6 border-b border-white/5">
+          <div className="flex items-center gap-4">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-2xl transition-all duration-500 ${state.isActive ? 'bg-indigo-600 shadow-indigo-600/40 animate-pulse' : 'bg-slate-800'}`}>
+              <CheckIcon className="w-6 h-6 text-white" />
+            </div>
+            <div className="hidden lg:block overflow-hidden whitespace-nowrap">
+              <h1 className="text-lg font-black text-white leading-tight tracking-tighter">AI Secretary</h1>
+              <p className="text-[9px] font-bold uppercase text-indigo-500 tracking-[0.2em]">Live Briefing</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 p-4 space-y-6 overflow-y-auto custom-scrollbar">
+          <div className="space-y-2">
+            <span className="hidden lg:block text-[10px] font-black text-slate-600 uppercase tracking-widest px-4 mb-2">Workspace</span>
+            
+            <button 
+              onClick={state.isActive ? stopSession : () => startSession()} 
+              className={`w-full group relative overflow-hidden p-4 rounded-2xl transition-all flex items-center justify-center gap-3 ${
+                state.isActive 
+                ? 'bg-red-500/10 border border-red-500/30 text-red-500 hover:bg-red-500/20' 
+                : 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-xl shadow-indigo-600/20'
+              }`}
+            >
+              <MicIcon className={`w-5 h-5 ${state.isActive ? 'animate-bounce' : ''}`} />
+              <span className="hidden lg:inline font-bold text-xs uppercase tracking-widest">{state.isActive ? 'Stop' : 'Start Recording'}</span>
+            </button>
+
+            <button 
+              onClick={() => setIsPresenting(true)} 
+              disabled={!briefingData}
+              className={`w-full p-4 rounded-2xl transition-all flex items-center justify-center gap-3 border ${
+                briefingData ? 'bg-white/5 border-white/10 text-white hover:bg-white/10' : 'bg-transparent border-white/5 text-slate-700 cursor-not-allowed'
+              }`}
+            >
+              <PresentationIcon className="w-5 h-5" />
+              <span className="hidden lg:inline font-bold text-xs uppercase tracking-widest">Stage Mode</span>
+            </button>
+
+            <button 
+              onClick={toggleCreativeMode} 
+              className={`w-full p-4 rounded-2xl transition-all flex items-center justify-center gap-3 border ${
+                isCreativeMode 
+                ? 'bg-purple-600/20 border-purple-500/50 text-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.1)]' 
+                : 'bg-white/5 border-transparent text-slate-500 hover:bg-white/10'
+              }`}
+            >
+              <SparklesIcon className="w-5 h-5" />
+              <span className="hidden lg:inline font-bold text-xs uppercase tracking-widest">Creative Mode</span>
+            </button>
+          </div>
+
+          {/* Smart Suggestions Panel */}
+          <div className="hidden lg:block pt-4 border-t border-white/5 space-y-4">
+             <div className="flex items-center justify-between px-4">
+                <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Smart Actions</span>
+                {state.suggestions.length > 0 && <span className="text-[9px] bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded-full font-bold">{state.suggestions.length}</span>}
+             </div>
+             <div className="space-y-3 px-2">
+                {state.suggestions.map(s => (
+                  <div key={s.id} className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 animate-in slide-in-from-right-4 duration-500">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <div className={`w-1.5 h-1.5 rounded-full ${s.type === 'action' ? 'bg-emerald-500' : s.type === 'insight' ? 'bg-indigo-500' : 'bg-amber-500'}`} />
+                      <span className="text-[9px] font-black uppercase text-slate-500 tracking-widest">{s.type}</span>
+                    </div>
+                    <p className="text-xs font-bold text-white mb-1 leading-relaxed">{s.text}</p>
+                    <p className="text-[10px] text-slate-500 italic">{s.reason}</p>
+                  </div>
+                ))}
+                {state.suggestions.length === 0 && (
+                  <div className="px-4 py-8 text-center border-2 border-dashed border-white/5 rounded-2xl opacity-20">
+                    <SparklesIcon className="w-6 h-6 mx-auto mb-2" />
+                    <p className="text-[9px] font-black uppercase tracking-widest leading-loose">Passive Analyse läuft...</p>
+                  </div>
+                )}
+             </div>
+          </div>
+
+          <div className="hidden lg:block pt-4 border-t border-white/5 space-y-4">
+             <div className="flex items-center justify-between px-4">
+                <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Verlauf</span>
+                <button onClick={resetData} className="p-1 text-slate-600 hover:text-red-400 transition-colors">
+                  <TrashIcon className="w-3.5 h-3.5" />
+                </button>
+             </div>
+             <div className="space-y-3 px-2">
+                {state.transcript.slice(-3).reverse().map(t => (
+                  <div key={t.id} className="p-3 rounded-xl bg-white/[0.02] border border-white/5 text-[10px] leading-relaxed text-slate-400">
+                    <span className={`font-black uppercase tracking-wider ${t.role === 'user' ? 'text-indigo-400' : 'text-purple-400'}`}>
+                      {t.role}:
+                    </span> {t.text}
+                  </div>
+                ))}
+             </div>
+          </div>
+        </div>
+
+        <div className="p-6 border-t border-white/5 text-center hidden lg:block">
+           <p className="text-[9px] font-bold text-slate-600 uppercase tracking-[0.3em]">AI V2.5 Native Engine</p>
+        </div>
+      </aside>
+
+      {/* EXECUTIVE BRIEFING STAGE */}
+      <main className="flex-1 relative overflow-hidden bg-[radial-gradient(circle_at_top_right,rgba(30,41,59,1),rgba(2,6,23,1))]">
+        <LiveBriefingPanel 
+          data={briefingData} 
+          isLoading={false} 
+          completedPoints={completedPoints} 
+          onTogglePoint={handleTogglePoint}
+          onUpdateTask={handleUpdateTask}
+        />
+
+        {!state.isActive && !briefingData && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-12 animate-in fade-in duration-1000">
+             <div className="w-40 h-40 bg-indigo-600/10 rounded-full flex items-center justify-center mb-10 border border-indigo-500/20 relative group">
+               <div className="absolute inset-0 bg-indigo-500/20 blur-2xl rounded-full group-hover:blur-3xl transition-all"></div>
+               <MicIcon className="w-16 h-16 text-indigo-400 opacity-60 relative z-10" />
+             </div>
+             <h2 className="text-5xl lg:text-7xl font-black text-white tracking-tighter mb-6">Brainstorming & Briefing.</h2>
+             <p className="text-slate-500 font-medium max-w-lg text-lg lg:text-xl leading-relaxed">
+               Ihre Stimme wird automatisch in Projekte, Aufgaben und Strategien übersetzt. Drücken Sie Start, um zu beginnen.
+             </p>
+          </div>
+        )}
+
+        {state.isActive && (
+          <div className={`fixed bottom-10 right-10 px-8 py-4 rounded-3xl shadow-2xl flex items-center gap-4 border border-white/10 backdrop-blur-3xl z-[100] transition-all duration-500 ${isCreativeMode ? 'bg-purple-600/40 border-purple-500/30' : 'bg-indigo-600/40 border-indigo-500/30'}`}>
+            <div className={`w-3 h-3 rounded-full animate-ping ${isCreativeMode ? 'bg-purple-400' : 'bg-indigo-400'}`}></div>
+            <span className="text-xs font-black uppercase tracking-[0.4em] drop-shadow-md">
+              {isCreativeMode ? 'Creative Sync active' : 'Passive Protocol active'}
+            </span>
+          </div>
+        )}
+      </main>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes celebration-particle {
+          0% { transform: translate(0, 0) scale(1.5); opacity: 1; filter: blur(0px); }
+          100% { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; filter: blur(4px); }
+        }
+        .animate-celebration-particle {
+          animation: celebration-particle 1.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+        }
+      `}} />
     </div>
   );
 };
