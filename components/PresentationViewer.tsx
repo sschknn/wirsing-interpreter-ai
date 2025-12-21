@@ -1,6 +1,7 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PresentationData, Slide } from '../types';
+import { SparklesIcon } from './Icons';
 
 interface PresentationViewerProps {
   data: PresentationData;
@@ -8,145 +9,143 @@ interface PresentationViewerProps {
 }
 
 const PresentationViewer: React.FC<PresentationViewerProps> = ({ data, onClose }) => {
-  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
-  const [isAutoNavigating, setIsAutoNavigating] = useState(false);
-  const prevSlidesCount = useRef(data.slides.length);
-
-  // Auto-advance logic: If the AI adds a new slide, automatically jump to it.
-  useEffect(() => {
-    if (data.slides.length > prevSlidesCount.current) {
-      // Logic: A new slide was added by the AI secretary. 
-      // We automatically move to the new slide (index is length because 0 is the title slide).
-      setCurrentSlideIndex(data.slides.length);
-      setIsAutoNavigating(true);
-      
-      // Reset the highlight after a short delay
-      const timer = setTimeout(() => setIsAutoNavigating(false), 1000);
-      prevSlidesCount.current = data.slides.length;
-      return () => clearTimeout(timer);
-    }
-    // Update reference if slides are removed or completely replaced
-    prevSlidesCount.current = data.slides.length;
-  }, [data.slides.length]);
+  const [index, setIndex] = useState(0);
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight' || e.key === ' ') next();
-      if (e.key === 'ArrowLeft') prev();
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight' || e.key === ' ') setIndex(i => Math.min(data.slides.length, i + 1));
+      if (e.key === 'ArrowLeft') setIndex(i => Math.max(0, i - 1));
       if (e.key === 'Escape') onClose();
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentSlideIndex, data.slides.length]);
-
-  const next = () => {
-    if (currentSlideIndex < data.slides.length) setCurrentSlideIndex(prev => prev + 1);
-  };
-
-  const prev = () => {
-    if (currentSlideIndex > 0) setCurrentSlideIndex(prev => prev - 1);
-  };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [data.slides.length, onClose]);
 
   const renderSlide = () => {
-    if (currentSlideIndex === 0) {
+    // Cinematic Title Slide
+    if (index === 0) {
       return (
-        <div className="flex flex-col items-center justify-center h-full text-center animate-in fade-in zoom-in duration-700">
-          <div className="w-24 h-1 bg-indigo-500 mb-8"></div>
-          <h1 className="text-7xl font-black text-white tracking-tighter mb-4 max-w-4xl">{data.title}</h1>
-          <p className="text-2xl text-slate-400 font-medium tracking-wide">{data.subtitle}</p>
-          <div className="mt-16 text-slate-600 font-mono text-xs uppercase tracking-[0.5em] flex items-center gap-4">
-             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-             Live AI Presentation Mode
+        <div className="h-full flex flex-col items-center justify-center text-center animate-in zoom-in-95 fade-in duration-1000">
+          <div className="w-24 h-[1px] bg-indigo-500/50 mb-16" />
+          <h1 className="text-8xl lg:text-[11rem] font-black text-white tracking-tighter mb-12 leading-[0.8] drop-shadow-2xl">
+            {data.title}
+          </h1>
+          <p className="text-3xl lg:text-5xl text-slate-500 font-medium tracking-tight max-w-5xl mx-auto">
+            {data.subtitle}
+          </p>
+          <div className="mt-24 flex items-center gap-4 text-indigo-500/30 font-bold uppercase tracking-[0.6em] text-[10px]">
+             <div className="w-2 h-2 rounded-full bg-indigo-500 animate-ping" />
+             Executive Protocol Active
           </div>
         </div>
       );
     }
 
-    const slide = data.slides[currentSlideIndex - 1];
-    // Safety check if slide index is out of bounds due to rapid state changes
+    const slide = data.slides[index - 1];
     if (!slide) return null;
 
+    const featuredImage = slide.items.find(i => i.imageUrl)?.imageUrl;
+
     return (
-      <div className="flex flex-col h-full animate-in fade-in slide-in-from-right-12 duration-500">
-        <header className="mb-12">
-           <span className="text-xs font-black uppercase tracking-[0.3em] text-indigo-500 mb-2 block">
-             Slide {currentSlideIndex} / {data.slides.length} • {slide.type?.toUpperCase()}
-           </span>
-           <h2 className="text-6xl font-black text-white tracking-tight leading-tight">{slide.title}</h2>
+      <div className="h-full flex flex-col animate-in fade-in slide-in-from-right-12 duration-700">
+        <header className="mb-20 flex justify-between items-end border-b border-white/5 pb-12">
+           <div className="space-y-4">
+             <span className="text-[10px] font-black uppercase tracking-[0.5em] text-indigo-500 block">
+               Section {index} • {slide.type?.toUpperCase()}
+             </span>
+             <h2 className="text-7xl font-black text-white tracking-tight leading-none">{slide.title}</h2>
+           </div>
+           <div className="hidden lg:block text-slate-900 font-black text-8xl opacity-50 select-none">0{index}</div>
         </header>
-        <div className="flex-1 overflow-y-auto pr-8 custom-scrollbar">
-          <ul className="space-y-8 pb-20">
-            {/* Added safety check for items array */}
-            {slide.items?.map((item, i) => (
-              <li key={i} className="flex items-start gap-8 group animate-in slide-in-from-left-4 duration-300" style={{ animationDelay: `${i * 50}ms` }}>
-                <div className="mt-4 w-3 h-3 rounded-full bg-indigo-500 shrink-0 group-hover:scale-150 transition-all shadow-[0_0_15px_rgba(99,102,241,0.5)]"></div>
-                <p className="text-3xl text-slate-200 font-medium leading-relaxed group-hover:text-white transition-colors">
-                  {item.text}
-                </p>
-              </li>
-            ))}
-          </ul>
+
+        <div className={`flex-1 flex gap-24 overflow-hidden ${featuredImage ? 'items-center' : ''}`}>
+           <div className={`${featuredImage ? 'w-1/2' : 'w-full'} overflow-y-auto pr-12 custom-scrollbar`}>
+              <ul className="space-y-20 pb-32">
+                {slide.items.map((item, i) => (
+                  <li key={i} className="group animate-in slide-in-from-left-8 duration-500" style={{ animationDelay: `${i * 0.12}ms` }}>
+                    <p className="text-5xl text-slate-200 font-bold leading-tight group-hover:text-white transition-colors mb-8 tracking-tight">
+                      {item.text}
+                    </p>
+                    {item.subItems && (
+                       <div className="space-y-6 pl-10 border-l border-indigo-500/20">
+                          {item.subItems.map((sub, j) => (
+                            <p key={j} className="text-2xl text-slate-500 font-medium tracking-tight leading-relaxed">{sub}</p>
+                          ))}
+                       </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+           </div>
+
+           {featuredImage && (
+             <div className="w-1/2 h-full py-12 animate-in zoom-in-105 fade-in duration-1000 delay-300">
+                <div className="w-full h-full rounded-[80px] overflow-hidden border border-white/10 shadow-[0_0_120px_rgba(0,0,0,0.9)] relative group">
+                   <img 
+                     src={featuredImage} 
+                     className="w-full h-full object-cover transition-transform duration-[3s] group-hover:scale-105" 
+                     alt="" 
+                   />
+                   <div className="absolute inset-0 bg-gradient-to-t from-[#020617]/80 via-transparent to-transparent flex items-end p-20">
+                      <div className="flex items-center gap-5">
+                         <SparklesIcon className="w-8 h-8 text-indigo-500" />
+                         <span className="text-xs font-black uppercase tracking-[0.5em] text-white/70">AI Visual Concept</span>
+                      </div>
+                   </div>
+                </div>
+             </div>
+           )}
         </div>
       </div>
     );
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-[#020617] flex flex-col p-20 select-none cursor-default overflow-hidden">
-      {/* Background Glows */}
-      <div className="absolute top-[-10%] right-[-10%] w-[800px] h-[800px] bg-indigo-600/10 blur-[150px] rounded-full pointer-events-none"></div>
-      <div className="absolute bottom-[-10%] left-[-10%] w-[600px] h-[600px] bg-indigo-800/5 blur-[120px] rounded-full pointer-events-none"></div>
-
-      {/* Progress Bar with Auto-Nav Pulse */}
-      <div className="absolute top-0 left-0 h-1.5 bg-white/5 w-full overflow-hidden">
+    <div className="fixed inset-0 z-[100] bg-[#020617] flex flex-col p-16 lg:p-28 overflow-hidden select-none cursor-default">
+      {/* Progress Bar */}
+      <div className="absolute top-0 left-0 w-full h-2 bg-white/5">
         <div 
-          className={`h-full bg-indigo-500 transition-all duration-700 shadow-[0_0_15px_indigo] ${isAutoNavigating ? 'animate-pulse brightness-150 scale-y-150' : ''}`} 
-          style={{ width: `${(currentSlideIndex / data.slides.length) * 100}%` }}
+          className="h-full bg-indigo-600 transition-all duration-1000 ease-out shadow-[0_0_25px_rgba(79,70,229,0.6)]" 
+          style={{ width: `${(index / data.slides.length) * 100}%` }} 
         />
       </div>
 
-      <div className="absolute top-8 right-8 flex gap-4">
-        {isAutoNavigating && (
-          <div className="flex items-center gap-2 px-4 py-2 bg-indigo-500/20 border border-indigo-500/30 rounded-full animate-in fade-in slide-in-from-top-4 duration-300">
-            <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping"></div>
-            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-300">Auto-Follow</span>
-          </div>
-        )}
+      {/* Control Buttons */}
+      <div className="absolute top-12 right-12 flex gap-6">
         <button 
-          onClick={onClose}
-          className="px-6 py-4 bg-white/5 hover:bg-white/10 border border-white/5 rounded-2xl text-slate-500 hover:text-white transition-all text-xs font-black uppercase tracking-widest flex items-center gap-3 group"
+          onClick={onClose} 
+          className="px-8 py-4 bg-white/5 hover:bg-white/10 rounded-full text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 hover:text-white transition-all border border-white/10 backdrop-blur-md"
         >
-          Beenden <span className="opacity-40 group-hover:opacity-100">ESC</span>
+          Exit View ESC
         </button>
       </div>
 
-      <div className="flex-1 max-w-7xl mx-auto w-full relative">
+      <div className="flex-1 max-w-[1700px] mx-auto w-full relative">
         {renderSlide()}
       </div>
 
-      <footer className="mt-12 flex justify-between items-end max-w-7xl mx-auto w-full">
-        <div className="flex gap-4">
-          <button 
-            disabled={currentSlideIndex === 0}
-            onClick={prev}
-            className="p-6 bg-white/5 hover:bg-white/10 rounded-3xl disabled:opacity-10 transition-all text-white border border-white/5 hover:border-indigo-500/30"
-          >
-            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" /></svg>
-          </button>
-          <button 
-             disabled={currentSlideIndex === data.slides.length}
-             onClick={next}
-             className="p-6 bg-indigo-600 hover:bg-indigo-700 rounded-3xl disabled:opacity-10 transition-all text-white shadow-xl shadow-indigo-600/20"
-          >
-            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
-          </button>
+      <footer className="mt-16 flex justify-between items-center max-w-[1700px] mx-auto w-full">
+        <div className="flex gap-8">
+           <button 
+             onClick={() => setIndex(i => Math.max(0, i - 1))}
+             disabled={index === 0}
+             className="p-10 rounded-full bg-white/5 hover:bg-white/10 disabled:opacity-5 transition-all text-white border border-white/10 active:scale-90"
+           >
+             <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path d="M15 19l-7-7 7-7" /></svg>
+           </button>
+           <button 
+             onClick={() => setIndex(i => Math.min(data.slides.length, i + 1))}
+             disabled={index === data.slides.length}
+             className="p-10 rounded-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-5 transition-all text-white shadow-3xl shadow-indigo-600/40 border border-indigo-400/20 active:scale-90"
+           >
+             <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path d="M9 5l7 7-7 7" /></svg>
+           </button>
         </div>
-        
-        <div className="text-right">
-          <div className="text-slate-600 text-[10px] font-black tracking-[0.4em] uppercase mb-1">Status</div>
-          <div className="text-indigo-500 font-black text-sm tracking-widest uppercase">
-            {currentSlideIndex === 0 ? 'Einleitung' : currentSlideIndex === data.slides.length ? 'Aktuelle Entwicklung' : `Slide ${currentSlideIndex}`}
-          </div>
+        <div className="flex flex-col items-end gap-2">
+           <div className="text-[10px] font-black uppercase tracking-[0.8em] text-slate-800">Executive Briefing System</div>
+           <div className="h-1 w-20 bg-indigo-500/20 rounded-full overflow-hidden">
+              <div className="h-full bg-indigo-500/40 animate-pulse" />
+           </div>
         </div>
       </footer>
     </div>

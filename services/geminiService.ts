@@ -2,27 +2,16 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ParsedData } from "../types";
 
-// Service to parse chaotic thoughts into structured JSON using Gemini 3
 export const parseThoughts = async (rawText: string): Promise<ParsedData> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
-  // Use ai.models.generateContent directly with model and prompt as per SDK rules
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    // Using a single Content object for standard contents structure
-    contents: { parts: [{ text: `Analysiere und strukturiere: ${rawText}` }] },
+    contents: { parts: [{ text: `Analysiere und strukturiere diesen Gedankenstrom für ein Executive Board: ${rawText}` }] },
     config: {
-      systemInstruction: `Du bist ein Thought-Parser Pro. Deine Aufgabe ist es, chaotische Gedanken in strukturierte, ausführbare Listen zu verwandeln.
-      
-      Regeln:
-      - Generiere für jede Aufgabe (Task) eine eindeutige 'id' (String).
-      - Setze 'completed' standardmäßig auf false.
-      - Aufgaben sollten im Imperativ formuliert sein.
-      - Erkenne Kategorien wie Arbeit, Privat, Haushalt, Finanzen.
-      - Bestimme die Priorität (hoch, mittel, niedrig) basierend auf dem Kontext.
-      - Erfinde keine Fakten, bleibe am Originaltext.
-      
-      Antworte ausschließlich im JSON-Format.`,
+      systemInstruction: `Du bist der ultimative Thought-Parser für Führungskräfte. 
+      Wandle chaotische Ideen in Projekte, Aufgaben und Listen um. 
+      Antworte strikt im JSON-Format.`,
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -36,7 +25,6 @@ export const parseThoughts = async (rawText: string): Promise<ParsedData> => {
                 title: { type: Type.STRING },
                 category: { type: Type.STRING },
                 priority: { type: Type.STRING, enum: ["hoch", "mittel", "niedrig"] },
-                deadline: { type: Type.STRING },
                 completed: { type: Type.BOOLEAN }
               },
               required: ["id", "title", "category", "priority", "completed"]
@@ -59,7 +47,7 @@ export const parseThoughts = async (rawText: string): Promise<ParsedData> => {
               type: Type.OBJECT,
               properties: {
                 title: { type: Type.STRING },
-                type: { type: Type.STRING, enum: ["Einkauf", "Ideen", "Notizen"] },
+                type: { type: Type.STRING },
                 items: { type: Type.ARRAY, items: { type: Type.STRING } }
               },
               required: ["title", "type", "items"]
@@ -72,14 +60,7 @@ export const parseThoughts = async (rawText: string): Promise<ParsedData> => {
     }
   });
 
-  try {
-    // Access response.text directly as a property, not as a method()
-    const text = response.text;
-    if (!text) {
-      throw new Error("Keine Textantwort von der KI erhalten.");
-    }
-    return JSON.parse(text) as ParsedData;
-  } catch (err) {
-    throw new Error("Fehler beim Parsen der KI-Antwort. Bitte versuche es erneut.");
-  }
+  const text = response.text;
+  if (!text) throw new Error("No response text");
+  return JSON.parse(text) as ParsedData;
 };

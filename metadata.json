@@ -1,8 +1,9 @@
 {
-  "name": "Live AI Voice Secretary",
-  "description": "A real-time AI assistant that listens, transcribes, and organizes your thoughts into a structured dashboard automatically.",
+  "name": "Live AI Visual Assistant",
+  "description": "A real-time AI assistant that creates visual briefings, generates images and researches live data.",
   "requestFramePermissions": [
     "microphone",
+    "camera",
     "geolocation"
   ]
 }

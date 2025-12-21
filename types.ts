@@ -1,12 +1,5 @@
 
-export type BoardCategory = 'Ideen' | 'Aufgaben' | 'Probleme' | 'Lösungen' | 'Entscheidungen' | 'Offene Fragen' | 'Notizen' | 'To-Dos';
-
-export interface BoardItem {
-  id: string;
-  category: BoardCategory;
-  content: string;
-  timestamp: number;
-}
+export type BoardCategory = 'Ideen' | 'Aufgaben' | 'Probleme' | 'Lösungen' | 'Strategie' | 'Recherche';
 
 export interface TranscriptEntry {
   id: string;
@@ -26,9 +19,7 @@ export interface SmartSuggestion {
 export interface SecretaryState {
   isActive: boolean;
   transcript: TranscriptEntry[];
-  board: BoardItem[];
   suggestions: SmartSuggestion[];
-  isThinking: boolean;
 }
 
 export enum Priority {
@@ -37,7 +28,6 @@ export enum Priority {
   LOW = 'niedrig'
 }
 
-// Added missing Task interface
 export interface Task {
   id: string;
   title: string;
@@ -47,30 +37,13 @@ export interface Task {
   completed: boolean;
 }
 
-// Added missing ParsedData interface
-export interface ParsedData {
-  tasks: Task[];
-  projects: {
-    name: string;
-    subtasks: string[];
-  }[];
-  lists: {
-    title: string;
-    type: 'Einkauf' | 'Ideen' | 'Notizen';
-    items: string[];
-  }[];
-  summary: string;
-}
-
-export interface SlideType {
-  type: 'strategy' | 'tasks' | 'ideas' | 'problems' | 'summary' | 'suggestions' | 'custom';
-}
-
 export interface SlideItem {
   text: string;
   subItems?: string[];
   category?: string;
   priority?: Priority;
+  imageUrl?: string;
+  imageLoading?: boolean;
 }
 
 export interface Insight {
@@ -82,7 +55,7 @@ export interface Insight {
 export interface Slide {
   title: string;
   items: SlideItem[];
-  type: SlideType['type'];
+  type: 'strategy' | 'tasks' | 'ideas' | 'problems' | 'summary' | 'suggestions' | 'custom' | 'gallery';
   insights?: Insight[];
 }
 
@@ -90,4 +63,11 @@ export interface PresentationData {
   title: string;
   subtitle: string;
   slides: Slide[];
+}
+
+export interface ParsedData {
+  tasks: Task[];
+  summary: string;
+  projects: { name: string; subtasks: string[] }[];
+  lists: { title: string; type: string; items: string[] }[];
 }
