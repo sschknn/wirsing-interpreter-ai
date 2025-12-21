@@ -1,10 +1,17 @@
 
-import React, { useState, useEffect, useRef } from 'react';
-import { GoogleGenAI, LiveServerMessage, Modality, Type, FunctionDeclaration } from '@google/genai';
-import { PresentationData, SecretaryState, SmartSuggestion, SlideItem } from './types';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { LiveServerMessage } from '@google/genai';
+import { PresentationData, SecretaryState, SmartSuggestion, SlideItem, AppMode, AppModeType, ToolbarState } from './types';
 import { MicIcon, SparklesIcon, CheckIcon, PresentationIcon, TrashIcon, HistoryIcon } from './components/Icons';
 import LiveBriefingPanel from './components/LiveBriefingPanel';
 import PresentationViewer from './components/PresentationViewer';
+import PresentationEditor from './components/PresentationEditor';
+import MenuBar from './components/MenuBar';
+import ModeSelector from './components/ModeSelector';
+import Toolbar from './components/Toolbar';
+import ExportMode from './components/ExportMode';
+import AdvancedTemplates from './components/AdvancedTemplates';
+import { AIService, PresentationInput } from './services/aiService';
 
 // Audio Utilities
 function encode(bytes: Uint8Array) {
@@ -34,55 +41,31 @@ async function decodeAudioData(data: Uint8Array, ctx: AudioContext, sampleRate: 
   return buffer;
 }
 
-const updatePresentationTool: FunctionDeclaration = {
-  name: 'update_briefing',
-  parameters: {
-    type: Type.OBJECT,
-    description: 'Aktualisiert das Board mit strukturierten Gedanken (Projekte, Aufgaben, Strategien).',
-    properties: {
-      title: { type: Type.STRING },
-      subtitle: { type: Type.STRING },
-      slides: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            title: { type: Type.STRING },
-            type: { type: Type.STRING, enum: ['strategy', 'tasks', 'ideas', 'problems', 'summary', 'gallery'] },
-            items: { 
-              type: Type.ARRAY, 
-              items: { 
-                type: Type.OBJECT,
-                properties: {
-                  text: { type: Type.STRING },
-                  subItems: { type: Type.ARRAY, items: { type: Type.STRING } },
-                  imageUrl: { type: Type.STRING }
-                },
-                required: ['text']
-              }
-            }
-          },
-          required: ['title', 'type', 'items']
-        }
-      }
-    },
-    required: ['title', 'subtitle', 'slides'],
-  },
+// Performance monitoring utility
+const measurePerformance = (name: string, fn: () => void | Promise<void>) => {
+  const start = performance.now();
+  const result = fn();
+  if (result instanceof Promise) {
+    return result.finally(() => {
+      const end = performance.now();
+      console.log(`Performance [${name}]: ${(end - start).toFixed(2)}ms`);
+    });
+  }
+  const end = performance.now();
+  console.log(`Performance [${name}]: ${(end - start).toFixed(2)}ms`);
+  return result;
 };
 
-const generateVisualTool: FunctionDeclaration = {
-  name: 'generate_visual',
-  parameters: {
-    type: Type.OBJECT,
-    description: 'Generiert ein KI-Bild für eine Folie.',
-    properties: {
-      prompt: { type: Type.STRING },
-      slideIndex: { type: Type.INTEGER },
-      itemIndex: { type: Type.INTEGER }
-    },
-    required: ['prompt', 'slideIndex', 'itemIndex'],
-  },
+// Debounce utility
+const debounce = (func: Function, delay: number) => {
+  let timeoutId: NodeJS.Timeout;
+  return (...args: any[]) => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => func.apply(null, args), delay);
+  };
 };
+
+// Tool-Definitionen wurden in AIService konsolidiert
 
 const App: React.FC = () => {
   const [isPresenting, setIsPresenting] = useState(false);
@@ -93,6 +76,29 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : null;
   });
   const [completedPoints, setCompletedPoints] = useState<Set<string>>(new Set());
+  const [isGeneratingImage, setIsGeneratingImage] = useState<boolean>(false);
+  const [performanceMetrics, setPerformanceMetrics] = useState<Record<string, number>>({});
+  const [isCreatingPresentation, setIsCreatingPresentation] = useState<boolean>(false);
+  const [isOptimizingLayout, setIsOptimizingLayout] = useState<boolean>(false);
+  
+  // New state for menu system and modes
+  const [appMode, setAppMode] = useState<AppMode>({
+    current: 'voice',
+    canUndo: false,
+    canRedo: false,
+    hasUnsavedChanges: false,
+    history: [],
+    historyIndex: -1
+  });
+  
+  const [toolbarState, setToolbarState] = useState<ToolbarState>({
+    selectedSlide: 0,
+    totalSlides: 0,
+    zoom: 100,
+    showGrid: false
+  });
+  const workerRef = useRef<Worker | null>(null);
+  const performanceMonitorRef = useRef<Record<string, number>>({});
 
   const sessionRef = useRef<any>(null);
   const audioContextInRef = useRef<AudioContext | null>(null);
@@ -106,56 +112,149 @@ const App: React.FC = () => {
     if (briefingData) localStorage.setItem('executive_briefing', JSON.stringify(briefingData));
   }, [briefingData]);
 
+  // Update toolbar state when briefing data changes
+  useEffect(() => {
+    if (briefingData) {
+      setToolbarState(prev => ({
+        ...prev,
+        totalSlides: briefingData.slides.length,
+        selectedSlide: Math.min(prev.selectedSlide, Math.max(0, briefingData.slides.length - 1))
+      }));
+      
+      // Add to history for undo/redo functionality
+      setAppMode(prev => {
+        const newHistory = prev.history.slice(0, prev.historyIndex + 1);
+        newHistory.push(briefingData);
+        return {
+          ...prev,
+          history: newHistory,
+          historyIndex: newHistory.length - 1,
+          hasUnsavedChanges: true
+        };
+      });
+    }
+  }, [briefingData]);
+
   useEffect(() => {
     return () => stopSession();
   }, []);
 
-  const handleGenerateImage = async (prompt: string, sIdx: number, iIdx: number) => {
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image',
-        contents: { parts: [{ text: `High-end executive visual: ${prompt}` }] },
-        config: { imageConfig: { aspectRatio: "16:9" } }
+  // Initialize Web Worker for heavy computations
+  useEffect(() => {
+    if (typeof Worker !== 'undefined') {
+      try {
+        workerRef.current = new Worker(new URL('./performance-worker.js', import.meta.url));
+        
+        workerRef.current.addEventListener('message', (e) => {
+          const { type, data } = e.data;
+          
+          switch (type) {
+            case 'PERFORMANCE_ANALYSIS_COMPLETE':
+              console.log('Performance analysis complete:', data.analysis);
+              break;
+            case 'BRIEFING_DATA_PREPROCESSED':
+              console.log('Briefing data preprocessed in', data.processingTime, 'ms');
+              break;
+            default:
+              break;
+          }
+        });
+        
+        workerRef.current.addEventListener('error', (error) => {
+          console.error('Worker error:', error);
+        });
+      } catch (error) {
+        console.warn('Web Worker not supported or failed to initialize:', error);
+      }
+    }
+    
+    return () => {
+      if (workerRef.current) {
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
+    };
+  }, []);
+
+  const updatePerformanceMetrics = useCallback((operation: string, duration: number) => {
+    setPerformanceMetrics(prev => ({
+      ...prev,
+      [operation]: duration
+    }));
+    
+    // Send to worker for analysis if available
+    if (workerRef.current) {
+      const performanceData = Object.entries({ ...performanceMetrics, [operation]: duration })
+        .map(([name, time]) => ({ name, duration: time as number }));
+      
+      workerRef.current.postMessage({
+        type: 'ANALYZE_PERFORMANCE',
+        data: performanceData
       });
-      const part = response.candidates?.[0]?.content?.parts.find(p => p.inlineData);
-      if (part?.inlineData) {
-        const url = `data:image/png;base64,${part.inlineData.data}`;
+    }
+  }, [performanceMetrics]);
+
+  const handleGenerateImage = useCallback(async (prompt: string, sIdx: number, iIdx: number) => {
+    const result = await measurePerformance('image-generation', async () => {
+      try {
+        setIsGeneratingImage(true);
+        const imageUrl = await AIService.generateVisual(prompt);
+        
+        // Batch state update for better performance
         setBriefingData(prev => {
           if (!prev) return null;
           const slides = [...prev.slides];
           if (slides[sIdx]) {
             const items = [...slides[sIdx].items];
-            if (items[iIdx]) items[iIdx] = { ...items[iIdx], imageUrl: url };
+            if (items[iIdx]) items[iIdx] = { ...items[iIdx], imageUrl };
             slides[sIdx] = { ...slides[sIdx], items };
           }
           return { ...prev, slides };
         });
+      } catch (err) { console.error("Image Gen Error:", err); }
+      finally {
+        setIsGeneratingImage(false);
       }
-    } catch (err) { console.error("Image Gen Error:", err); }
-  };
+    });
+    return result;
+  }, []);
 
-  const startSession = async () => {
-    if (state.isActive || isStoppingRef.current) return;
-    isStoppingRef.current = false;
+  const debouncedTogglePoint = useMemo(
+    () => debounce((id: string) => {
+      setCompletedPoints(prev => {
+        const n = new Set(prev);
+        n.has(id) ? n.delete(id) : n.add(id);
+        return n;
+      });
+    }, 100),
+    []
+  );
 
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
-      const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
-      const outputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-      
-      // Mobile Browser requires explicit resume on click
-      if (inputCtx.state === 'suspended') await inputCtx.resume();
-      if (outputCtx.state === 'suspended') await outputCtx.resume();
+  const onTogglePoint = useCallback((id: string) => {
+    measurePerformance('toggle-point', () => {
+      debouncedTogglePoint(id);
+    });
+  }, [debouncedTogglePoint]);
 
-      audioContextInRef.current = inputCtx;
-      audioContextOutRef.current = outputCtx;
+  const optimizedStartSession = useCallback(async () => {
+    const result = await measurePerformance('start-session', async () => {
+      if (state.isActive || isStoppingRef.current) return;
+      isStoppingRef.current = false;
 
-      const sessionPromise = ai.live.connect({
-        model: 'gemini-2.5-flash-native-audio-preview-09-2025',
-        callbacks: {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+        const outputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+        
+        // Mobile Browser requires explicit resume on click
+        if (inputCtx.state === 'suspended') await inputCtx.resume();
+        if (outputCtx.state === 'suspended') await outputCtx.resume();
+
+        audioContextInRef.current = inputCtx;
+        audioContextOutRef.current = outputCtx;
+
+        const sessionPromise = AIService.connectLiveSession({
           onopen: () => {
             if (isStoppingRef.current) return;
             const source = inputCtx.createMediaStreamSource(stream);
@@ -209,51 +308,264 @@ const App: React.FC = () => {
           },
           onerror: (e) => { if (!isStoppingRef.current) stopSession(); },
           onclose: () => { if (!isStoppingRef.current) stopSession(); }
-        },
-        config: {
-          responseModalities: [Modality.AUDIO],
-          tools: [{ functionDeclarations: [updatePresentationTool, generateVisualTool] }, { googleSearch: {} }],
-          systemInstruction: "Du bist ein intelligenter Thought-Parser. Strukturiere gesprochene Gedanken live in Projekte und generiere Bilder zur Visualisierung. Antworte immer auf Deutsch."
-        }
-      });
-      sessionRef.current = sessionPromise;
-    } catch (err) { 
-      console.error("Session Start Error:", err); 
-      stopSession();
-    }
-  };
+        });
+        sessionRef.current = sessionPromise;
+      } catch (err) { 
+        console.error("Session Start Error:", err); 
+        stopSession();
+      }
+    });
+    return result;
+  }, [state.isActive, handleGenerateImage]);
 
-  const stopSession = () => {
-    if (isStoppingRef.current) return;
-    isStoppingRef.current = true;
-    setState(p => ({ ...p, isActive: false }));
-    if (scriptProcessorRef.current) {
-      try { scriptProcessorRef.current.onaudioprocess = null; scriptProcessorRef.current.disconnect(); } catch(e) {}
-      scriptProcessorRef.current = null;
+  const optimizedStopSession = useCallback(() => {
+    measurePerformance('stop-session', () => {
+      if (isStoppingRef.current) return;
+      isStoppingRef.current = true;
+      setState(p => ({ ...p, isActive: false }));
+      if (scriptProcessorRef.current) {
+        try { scriptProcessorRef.current.onaudioprocess = null; scriptProcessorRef.current.disconnect(); } catch(e) {}
+        scriptProcessorRef.current = null;
+      }
+      if (audioSourceRef.current) {
+        try { audioSourceRef.current.disconnect(); } catch(e) {}
+        audioSourceRef.current = null;
+      }
+      if (sessionRef.current) {
+        sessionRef.current.then((s: any) => { try { s.close(); } catch(e){} }).catch(() => {});
+        sessionRef.current = null;
+      }
+      if (audioContextInRef.current && audioContextInRef.current.state !== 'closed') {
+        try { audioContextInRef.current.close().catch(() => {}); } catch(e) {}
+      }
+      audioContextInRef.current = null;
+      if (audioContextOutRef.current && audioContextOutRef.current.state !== 'closed') {
+        try { audioContextOutRef.current.close().catch(() => {}); } catch(e) {}
+      }
+      audioContextOutRef.current = null;
+      nextStartTimeRef.current = 0;
+      setTimeout(() => { isStoppingRef.current = false; }, 1000);
+    });
+  }, []);
+
+  const startSession = optimizedStartSession;
+  const stopSession = optimizedStopSession;
+
+  // Menu and Mode Handlers
+  const handleModeChange = useCallback((mode: AppModeType) => {
+    setAppMode(prev => ({ ...prev, current: mode }));
+    
+    // Close sidebar when switching to presentation mode
+    if (mode === 'presentation') {
+      setIsSidebarOpen(false);
+      setIsPresenting(true);
     }
-    if (audioSourceRef.current) {
-      try { audioSourceRef.current.disconnect(); } catch(e) {}
-      audioSourceRef.current = null;
+    
+    // Auto-save when switching modes
+    if (mode !== 'voice' && appMode.hasUnsavedChanges && briefingData) {
+      localStorage.setItem('executive_briefing', JSON.stringify(briefingData));
+      setAppMode(prev => ({ ...prev, hasUnsavedChanges: false }));
     }
-    if (sessionRef.current) {
-      sessionRef.current.then((s: any) => { try { s.close(); } catch(e){} }).catch(() => {});
-      sessionRef.current = null;
+  }, [appMode.hasUnsavedChanges, briefingData]);
+
+  const handleFileAction = useCallback((action: string) => {
+    switch (action) {
+      case 'new':
+        if (confirm('Neue Präsentation erstellen? Alle ungespeicherten Änderungen gehen verloren.')) {
+          setBriefingData(null);
+          localStorage.removeItem('executive_briefing');
+          setCompletedPoints(new Set());
+          setAppMode(prev => ({ ...prev, hasUnsavedChanges: false, history: [], historyIndex: -1 }));
+        }
+        break;
+      case 'open':
+        // TODO: Implement file open dialog
+        console.log('File open not implemented yet');
+        break;
+      case 'save':
+        if (briefingData) {
+          localStorage.setItem('executive_briefing', JSON.stringify(briefingData));
+          setAppMode(prev => ({ ...prev, hasUnsavedChanges: false }));
+        }
+        break;
+      case 'export':
+        // TODO: Implement export functionality
+        console.log('Export not implemented yet');
+        break;
     }
-    if (audioContextInRef.current && audioContextInRef.current.state !== 'closed') {
-      try { audioContextInRef.current.close().catch(() => {}); } catch(e) {}
+  }, [briefingData]);
+
+  const handleEditAction = useCallback((action: string) => {
+    switch (action) {
+      case 'undo':
+        // TODO: Implement undo functionality
+        console.log('Undo not implemented yet');
+        break;
+      case 'redo':
+        // TODO: Implement redo functionality
+        console.log('Redo not implemented yet');
+        break;
+      case 'copy':
+        // TODO: Implement copy functionality
+        console.log('Copy not implemented yet');
+        break;
+      case 'paste':
+        // TODO: Implement paste functionality
+        console.log('Paste not implemented yet');
+        break;
     }
-    audioContextInRef.current = null;
-    if (audioContextOutRef.current && audioContextOutRef.current.state !== 'closed') {
-      try { audioContextOutRef.current.close().catch(() => {}); } catch(e) {}
+  }, []);
+
+  const handleInsertAction = useCallback((action: string) => {
+    switch (action) {
+      case 'new-slide':
+        // TODO: Implement new slide functionality
+        console.log('New slide not implemented yet');
+        break;
+      case 'text':
+        // TODO: Implement text insertion
+        console.log('Text insertion not implemented yet');
+        break;
+      case 'image':
+        // TODO: Implement image insertion
+        console.log('Image insertion not implemented yet');
+        break;
+      case 'shape':
+        // TODO: Implement shape insertion
+        console.log('Shape insertion not implemented yet');
+        break;
     }
-    audioContextOutRef.current = null;
-    nextStartTimeRef.current = 0;
-    setTimeout(() => { isStoppingRef.current = false; }, 1000);
-  };
+  }, []);
+
+  const handleViewAction = useCallback((action: string) => {
+    switch (action) {
+      case 'editor':
+        handleModeChange('editor');
+        break;
+      case 'presentation':
+        handleModeChange('presentation');
+        break;
+      case 'fullscreen':
+        if (document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen();
+        }
+        break;
+    }
+  }, [handleModeChange]);
+
+  // Erweiterte KI-Handler
+  const handleCreatePresentation = useCallback(async () => {
+    if (!briefingData) return;
+    
+    try {
+      setIsCreatingPresentation(true);
+      
+      const input: PresentationInput = {
+        title: briefingData.title,
+        subtitle: briefingData.subtitle,
+        content: `Erstelle eine professionelle Präsentation basierend auf: ${JSON.stringify(briefingData)}`,
+        targetAudience: 'Führungskräfte',
+        presentationStyle: 'executive',
+        language: 'de',
+        includeImages: true,
+        maxSlides: 10
+      };
+      
+      const validation = AIService.validatePresentationInput(input);
+      if (!validation.isValid) {
+        alert(`Validierungsfehler: ${validation.errors.join(', ')}`);
+        return;
+      }
+      
+      const enhancedPresentation = await AIService.createPresentation(input);
+      setBriefingData(enhancedPresentation);
+      
+    } catch (error) {
+      console.error('Präsentationserstellung fehlgeschlagen:', error);
+      alert('Präsentationserstellung fehlgeschlagen. Bitte versuchen Sie es erneut.');
+    } finally {
+      setIsCreatingPresentation(false);
+    }
+  }, [briefingData]);
+
+  const handleOptimizeLayout = useCallback(async () => {
+    if (!briefingData) return;
+    
+    try {
+      setIsOptimizingLayout(true);
+      
+      const optimizedLayout = await AIService.optimizeLayout(briefingData.slides);
+      
+      // Reorganisiere Folien basierend auf optimierter Reihenfolge
+      const reorderedSlides = optimizedLayout.slideOrder.map(index => briefingData.slides[index]);
+      setBriefingData({ ...briefingData, slides: reorderedSlides });
+      
+    } catch (error) {
+      console.error('Layout-Optimierung fehlgeschlagen:', error);
+      alert('Layout-Optimierung fehlgeschlagen. Bitte versuchen Sie es erneut.');
+    } finally {
+      setIsOptimizingLayout(false);
+    }
+  }, [briefingData]);
+
+  const handleAddImages = useCallback(async () => {
+    if (!briefingData) return;
+    
+    try {
+      setIsGeneratingImage(true);
+      
+      const enhancedSlides = await AIService.addImagesToSlides(briefingData.slides);
+      setBriefingData({ ...briefingData, slides: enhancedSlides });
+      
+    } catch (error) {
+      console.error('Bildhinzufügung fehlgeschlagen:', error);
+      alert('Bildhinzufügung fehlgeschlagen. Bitte versuchen Sie es erneut.');
+    } finally {
+      setIsGeneratingImage(false);
+    }
+  }, [briefingData]);
+
+  const handleToolbarAction = useCallback({
+    onUndo: () => handleEditAction('undo'),
+    onRedo: () => handleEditAction('redo'),
+    onSave: () => handleFileAction('save'),
+    onExport: () => handleFileAction('export'),
+    onSlideNavigate: (direction: 'prev' | 'next') => {
+      setToolbarState(prev => ({
+        ...prev,
+        selectedSlide: direction === 'prev' 
+          ? Math.max(0, prev.selectedSlide - 1)
+          : Math.min(prev.totalSlides - 1, prev.selectedSlide + 1)
+      }));
+    },
+    onZoomChange: (zoom: number) => {
+      setToolbarState(prev => ({ ...prev, zoom }));
+    },
+    onToggleGrid: () => {
+      setToolbarState(prev => ({ ...prev, showGrid: !prev.showGrid }));
+    },
+    onPresentationMode: () => handleModeChange('presentation'),
+    onCreatePresentation: handleCreatePresentation,
+    onOptimizeLayout: handleOptimizeLayout,
+    onAddImages: handleAddImages
+  }, [handleEditAction, handleFileAction, handleModeChange, handleCreatePresentation, handleOptimizeLayout, handleAddImages]);
 
   return (
     <div className="h-screen flex bg-[#020617] text-slate-200 overflow-hidden font-sans selection:bg-indigo-500/40 relative">
       {isPresenting && briefingData && <PresentationViewer data={briefingData} onClose={() => setIsPresenting(false)} />}
+      
+      {/* Performance Monitor Panel - Development Only */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="fixed bottom-4 right-4 bg-black/80 text-white p-2 rounded text-xs font-mono z-[1000] max-w-xs">
+          <div className="font-bold mb-1">Performance Metrics:</div>
+          {Object.entries(performanceMetrics).map(([key, value]) => (
+            <div key={key} className="flex justify-between">
+              <span>{key}:</span>
+              <span>{value}ms</span>
+            </div>
+          ))}
+        </div>
+      )}
       
       {/* Mobile Top Bar */}
       <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-slate-950/80 backdrop-blur-xl border-b border-white/5 z-[60] flex items-center justify-between px-6 pt-safe">
@@ -261,8 +573,14 @@ const App: React.FC = () => {
           <div className={`w-2 h-2 rounded-full ${state.isActive ? 'bg-indigo-500 animate-pulse' : 'bg-slate-700'}`} />
           <span className="font-black text-xs uppercase tracking-tighter">Thought Parser</span>
         </div>
-        <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-slate-400">
-          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isSidebarOpen ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16m-7 6h7"} /></svg>
+        <button 
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
+          className="p-2 text-slate-400 transition-colors hover:text-white"
+          aria-label="Sidebar umschalten"
+        >
+          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isSidebarOpen ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16m-7 6h7"} />
+          </svg>
         </button>
       </div>
 
@@ -283,22 +601,23 @@ const App: React.FC = () => {
           <button 
             onClick={state.isActive ? stopSession : startSession}
             disabled={isStoppingRef.current}
-            className={`w-full p-5 rounded-2xl flex items-center justify-center gap-3 transition-all duration-300 font-bold text-xs uppercase tracking-widest border shadow-lg ${
+            className={`w-full p-5 rounded-2xl flex items-center justify-center gap-3 transition-all duration-300 font-bold text-xs uppercase tracking-widest border shadow-lg will-change-transform ${
               state.isActive 
-              ? 'bg-red-500/10 text-red-500 border-red-500/20' 
-              : 'bg-indigo-600 text-white border-indigo-400/20 shadow-indigo-600/20'
-            }`}
+              ? 'bg-red-500/10 text-red-500 border-red-500/20 hover:bg-red-500/20' 
+              : 'bg-indigo-600 text-white border-indigo-400/20 shadow-indigo-600/20 hover:bg-indigo-500'
+            } disabled:opacity-50`}
           >
-            <MicIcon className="w-5 h-5" /> {state.isActive ? 'Stopp' : 'Start Session'}
+            <MicIcon className="w-5 h-5" /> 
+            {isStoppingRef.current ? 'Stopping...' : state.isActive ? 'Stopp' : 'Start Session'}
           </button>
 
-          <button 
-            onClick={() => { setIsPresenting(true); setIsSidebarOpen(false); }}
-            disabled={!briefingData || state.isActive}
-            className="w-full p-5 rounded-2xl border border-white/10 flex items-center justify-center gap-3 hover:bg-white/5 transition-all text-xs font-bold uppercase tracking-widest disabled:opacity-20 group"
-          >
-            <PresentationIcon className="w-5 h-5 group-hover:scale-110 transition-transform" /> Stage Mode
-          </button>
+          {/* Mode Selector - Replaces Stage Mode Button */}
+          <ModeSelector
+            currentMode={appMode.current}
+            onModeChange={handleModeChange}
+            disabled={state.isActive}
+            hasData={!!briefingData}
+          />
 
           <div className="pt-8 border-t border-white/5">
              <div className="flex items-center justify-between mb-6 px-2">
@@ -325,7 +644,15 @@ const App: React.FC = () => {
         
         <div className="p-6 border-t border-white/5 pb-safe">
           <button 
-            onClick={() => { if(confirm('Board leeren?')) { setBriefingData(null); localStorage.removeItem('executive_briefing'); } }} 
+            onClick={() => {
+              if(confirm('Board leeren?')) {
+                measurePerformance('reset-board', () => {
+                  setBriefingData(null);
+                  localStorage.removeItem('executive_briefing');
+                  setCompletedPoints(new Set());
+                });
+              }
+            }} 
             className="w-full text-slate-600 hover:text-red-400 transition-colors flex items-center justify-center gap-2 text-[10px] font-bold uppercase tracking-widest p-2"
           >
             <TrashIcon className="w-3 h-3" /> Reset Board
@@ -335,23 +662,104 @@ const App: React.FC = () => {
 
       {/* Overlay for mobile sidebar */}
       {isSidebarOpen && (
-        <div onClick={() => setIsSidebarOpen(false)} className="lg:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[65]" />
+        <div 
+          onClick={() => setIsSidebarOpen(false)} 
+          className="lg:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[65] cursor-pointer" 
+        />
       )}
 
       <main className="flex-1 relative bg-[radial-gradient(circle_at_top_right,rgba(30,41,59,0.4),rgba(2,6,23,1))] overflow-hidden pt-16 lg:pt-0">
-        <div className="h-full overflow-hidden">
-          <LiveBriefingPanel 
-            data={briefingData} 
-            isLoading={false} 
-            completedPoints={completedPoints}
-            onTogglePoint={(id) => setCompletedPoints(p => {
-              const n = new Set(p);
-              n.has(id) ? n.delete(id) : n.add(id);
-              return n;
-            })}
+        {/* Menu Bar for editor and presentation modes */}
+        {(appMode.current === 'editor' || appMode.current === 'presentation' || appMode.current === 'export' || appMode.current === 'templates') && (
+          <div className="border-b border-white/5">
+            <MenuBar
+              onFileAction={handleFileAction}
+              onEditAction={handleEditAction}
+              onInsertAction={handleInsertAction}
+              onViewAction={handleViewAction}
+              canUndo={appMode.canUndo}
+              canRedo={appMode.canRedo}
+              hasUnsavedChanges={appMode.hasUnsavedChanges}
+              currentMode={appMode.current}
+              disabled={state.isActive}
+            />
+          </div>
+        )}
+        
+        {/* Toolbar for editor and presentation modes */}
+        {(appMode.current === 'editor' || appMode.current === 'presentation') && briefingData && (
+          <div className="border-b border-white/5">
+            <Toolbar
+              state={toolbarState}
+              onUndo={handleToolbarAction.onUndo}
+              onRedo={handleToolbarAction.onRedo}
+              onSave={handleToolbarAction.onSave}
+              onExport={handleToolbarAction.onExport}
+              onSlideNavigate={handleToolbarAction.onSlideNavigate}
+              onZoomChange={handleToolbarAction.onZoomChange}
+              onToggleGrid={handleToolbarAction.onToggleGrid}
+              onPresentationMode={handleToolbarAction.onPresentationMode}
+              onCreatePresentation={handleToolbarAction.onCreatePresentation}
+              onOptimizeLayout={handleToolbarAction.onOptimizeLayout}
+              onAddImages={handleToolbarAction.onAddImages}
+              canUndo={appMode.canUndo}
+              canRedo={appMode.canRedo}
+              canSave={!!briefingData}
+              hasUnsavedChanges={appMode.hasUnsavedChanges}
+              disabled={state.isActive}
+              isCreatingPresentation={isCreatingPresentation}
+              isOptimizingLayout={isOptimizingLayout}
+              isAddingImages={isGeneratingImage}
+            />
+          </div>
+        )}
+        
+        {/* Mode-specific content */}
+        {appMode.current === 'editor' && briefingData ? (
+          <PresentationEditor
+            data={briefingData}
+            onDataChange={setBriefingData}
+            onModeChange={handleModeChange}
+            disabled={state.isActive}
           />
-        </div>
-        {!briefingData && !state.isActive && (
+        ) : appMode.current === 'export' && briefingData ? (
+          <ExportMode
+            data={briefingData}
+            onExport={(format, options) => {
+              // Export functionality will be handled by ExportMode component
+              console.log('Exporting to', format, 'with options:', options);
+            }}
+            onModeChange={handleModeChange}
+          />
+        ) : appMode.current === 'templates' ? (
+          <AdvancedTemplates
+            onSelectTemplate={(template) => {
+              if (template) {
+                setBriefingData(template);
+                handleModeChange('editor');
+              }
+            }}
+            onCreateCustom={(customTemplate) => {
+              if (customTemplate) {
+                setBriefingData(customTemplate);
+                handleModeChange('editor');
+              }
+            }}
+            onModeChange={handleModeChange}
+          />
+        ) : appMode.current === 'voice' || !briefingData ? (
+          <div className="h-full overflow-hidden">
+            <LiveBriefingPanel 
+              data={briefingData} 
+              isLoading={false} 
+              completedPoints={completedPoints}
+              onTogglePoint={onTogglePoint}
+            />
+          </div>
+        ) : null}
+        
+        {/* Empty state for voice mode */}
+        {!briefingData && !state.isActive && appMode.current === 'voice' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-8">
             <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-7xl font-black text-white tracking-tighter mb-6 leading-none">Intelligence as a Briefing.</h2>
             <p className="text-slate-500 max-w-sm text-lg sm:text-xl font-medium">Starten Sie und sprechen Sie frei. Die KI strukturiert alles.</p>
@@ -365,6 +773,68 @@ const App: React.FC = () => {
           50% { height: 24px; transform: translateY(-4px); }
         }
         .animate-voice-bounce { animation: voice-bounce 0.8s ease-in-out infinite; }
+        
+        /* Performance optimizations */
+        * {
+          box-sizing: border-box;
+        }
+        
+        .custom-scrollbar {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(99, 102, 241, 0.3) transparent;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(99, 102, 241, 0.3);
+          border-radius: 3px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: rgba(99, 102, 241, 0.5);
+        }
+        
+        /* GPU acceleration for better performance */
+        .will-change-transform {
+          will-change: transform;
+          transform: translateZ(0);
+        }
+        
+        /* Optimize animations */
+        .transition-all {
+          transition-property: all;
+          transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        /* Prevent layout shifts */
+        .fixed {
+          contain: layout style paint;
+        }
+        
+        /* Optimize image rendering */
+        img {
+          image-rendering: -webkit-optimize-contrast;
+          image-rendering: crisp-edges;
+        }
+        
+        /* Reduce repaints */
+        .backdrop-blur-xl {
+          backdrop-filter: blur(24px);
+          -webkit-backdrop-filter: blur(24px);
+        }
+        
+        /* Optimize focus states */
+        button:focus {
+          outline: 2px solid rgba(99, 102, 241, 0.5);
+          outline-offset: 2px;
+        }
       `}} />
     </div>
   );
