@@ -80,7 +80,7 @@ const LiveBriefingPanel: React.FC<LiveBriefingPanelProps> = ({
       </header>
 
       <div className="flex-1 overflow-y-auto custom-scrollbar pr-6 space-y-24 pb-64">
-        {data.slides.map((slide, sIdx) => (
+        {(data.slides || []).map((slide, sIdx) => (
           <section key={sIdx} className="animate-in fade-in slide-in-from-bottom-8 duration-1000 border-l border-white/5 pl-10 ml-1 relative">
             {/* Section Indicator */}
             <div className="absolute top-0 -left-[1.5px] w-0.5 h-12 bg-gradient-to-b from-indigo-500 to-transparent"></div>
@@ -92,7 +92,7 @@ const LiveBriefingPanel: React.FC<LiveBriefingPanelProps> = ({
                  slide.type === 'ideas' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30 shadow-[0_0_20px_rgba(168,85,247,0.05)]' :
                  'bg-white/5 text-slate-400 border-white/10'
                }`}>
-                 {slide.type}
+                 {slide.type || 'custom'}
                </div>
                <div className="h-px bg-gradient-to-r from-white/10 via-white/[0.02] to-transparent flex-1"></div>
             </div>
@@ -103,7 +103,7 @@ const LiveBriefingPanel: React.FC<LiveBriefingPanelProps> = ({
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
               <div className="lg:col-span-7 space-y-10">
-                {slide.items?.map((item, iIdx) => {
+                {(slide.items || []).map((item, iIdx) => {
                   const pointId = `${sIdx}-${iIdx}-${item.text}`;
                   const isCompleted = completedPoints.has(pointId);
                   const isTask = slide.type === 'tasks';
@@ -203,7 +203,7 @@ const LiveBriefingPanel: React.FC<LiveBriefingPanelProps> = ({
 
                               {item.subItems && item.subItems.length > 0 && (
                                 <div className="mt-6 ml-1 pl-8 border-l border-white/5 space-y-5">
-                                  {item.subItems.map((sub, ssIdx) => (
+                                  {(item.subItems || []).map((sub, ssIdx) => (
                                     <div key={ssIdx} className="flex items-center gap-4 group/sub">
                                       <div className="w-1.5 h-1.5 rounded-full bg-white/10 group-hover/sub:bg-indigo-500/40 transition-all group-hover/sub:scale-125"></div>
                                       <p className="text-base lg:text-lg text-slate-400 font-medium group-hover/sub:text-slate-200 transition-colors">
@@ -222,12 +222,12 @@ const LiveBriefingPanel: React.FC<LiveBriefingPanelProps> = ({
                 })}
               </div>
 
-              {slide.insights && slide.insights.length > 0 && (
+              {(slide.insights || []).length > 0 && (
                 <div className="lg:col-span-5 space-y-6">
                   <h5 className="text-[10px] font-black uppercase tracking-[0.4em] text-indigo-500/40 mb-6 flex items-center gap-3">
                     <div className="w-10 h-px bg-indigo-500/20"></div> Smart Context
                   </h5>
-                  {slide.insights.map((insight, insIdx) => (
+                  {slide.insights?.map((insight, insIdx) => (
                     <InsightCard key={insIdx} insight={insight} />
                   ))}
                 </div>
@@ -251,7 +251,7 @@ const LiveBriefingPanel: React.FC<LiveBriefingPanelProps> = ({
          </div>
          <div className="text-right">
             <div className="text-[9px] font-black text-slate-700 uppercase tracking-widest mb-1">Briefing Snapshot</div>
-            <div className="text-[10px] font-bold text-slate-400">{new Date().toLocaleTimeString()} • {data.slides.length} Sektionen</div>
+            <div className="text-[10px] font-bold text-slate-400">{new Date().toLocaleTimeString()} • {data.slides?.length || 0} Sektionen</div>
          </div>
       </footer>
     </div>

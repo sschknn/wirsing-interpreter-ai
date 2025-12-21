@@ -104,6 +104,7 @@ const smartSuggestionTool: FunctionDeclaration = {
 const App: React.FC = () => {
   const [isCreativeMode, setIsCreativeMode] = useState(false);
   const [isPresenting, setIsPresenting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [state, setState] = useState<SecretaryState>(() => {
     const saved = localStorage.getItem('secretary_state');
     return saved ? JSON.parse(saved) : { isActive: false, transcript: [], board: [], suggestions: [], isThinking: false };
@@ -127,6 +128,7 @@ const App: React.FC = () => {
   const audioContextOutRef = useRef<AudioContext | null>(null);
   const nextStartTimeRef = useRef(0);
   const audioSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
+  const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
   const currentInputTranscription = useRef('');
   const currentOutputTranscription = useRef('');
 
@@ -173,9 +175,12 @@ const App: React.FC = () => {
     if (!briefingData) return;
     const newData = { ...briefingData };
     const newSlides = [...newData.slides];
-    const newItems = [...newSlides[slideIdx].items];
+    const slide = newSlides[slideIdx];
+    if (!slide) return;
+    
+    const newItems = [...(slide.items || [])];
     newItems[itemIdx] = updatedItem;
-    newSlides[slideIdx] = { ...newSlides[slideIdx], items: newItems };
+    newSlides[slideIdx] = { ...slide, items: newItems };
     newData.slides = newSlides;
     setBriefingData(newData);
   };
@@ -188,13 +193,13 @@ const App: React.FC = () => {
         model: 'gemini-3-flash-preview',
         contents: { parts: [{ text: `Original: "${text}"` }] },
         config: { 
-          systemInstruction: `Du bist ein hochpräziser linguistischer Editor für transkribierte Sprache.
-          Deine Aufgabe:
-          1. Entferne strikt alle Füllwörter (z.B. "ähm", "äh", "halt", "sozusagen", "quasi", "einfach", "eigentlich", "irgendwie", "mal", "ja").
-          2. Bereinige Satzabbrüche, Wiederholungen und Fehlstarts.
-          3. Maximiere die syntaktische Klarheit und Lesbarkeit, ohne den sachlichen Kern oder den Tonfall der Nachricht zu verfälschen.
-          4. Verwandle fragmentierte Gedanken in flüssige, grammatikalisch korrekte Sätze.
-          5. Antworte AUSSCHLIESSLICH mit dem bereinigten Text. Keine Erklärungen.`,
+          systemInstruction: `Du bist ein hochpräziser linguistischer Editor für transkribierte Sprache im Geschäftskontext.
+          Aufgaben:
+          1. Entferne strikt Füllwörter und Partikel (ähm, äh, halt, sozusagen, quasi, einfach, eigentlich, irgendwie, mal, ja, gut, jetzt, genau).
+          2. Bereinige Satzabbrüche und Wortwiederholungen.
+          3. Maximiere Klarheit und Lesbarkeit.
+          4. Verwandle Gedanken in flüssige deutsche Sätze.
+          5. Antworte AUSSCHLIESSLICH mit dem bereinigten Text.`,
           thinkingConfig: { thinkingBudget: 0 }
         }
       });
@@ -203,27 +208,23 @@ const App: React.FC = () => {
   };
 
   const startSession = async (modeOverride?: boolean) => {
+    setErrorMsg(null);
     const activeMode = modeOverride !== undefined ? modeOverride : isCreativeMode;
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
       const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
       const outputCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      
+      if (inputCtx.state === 'suspended') await inputCtx.resume();
+      if (outputCtx.state === 'suspended') await outputCtx.resume();
+
       audioContextInRef.current = inputCtx;
       audioContextOutRef.current = outputCtx;
       
-      const passiveInstruction = `Du bist die 'Silent Executive Assistant'.
-      - Du sprichst NIEMALS. Nutze Tool-Calls 'update_live_presentation' und 'provide_smart_suggestion'.
-      - Gruppiere Aufgaben hierarchisch.
-      - Nutze 'provide_smart_suggestion', wenn du eine wichtige Lücke in der Planung siehst oder eine Klärung brauchst.
-      - Wenn der Nutzer nach Fakten fragt, nutze Grounding für exakte Daten.
-      - Aktualisiere das Briefing-Board kontinuierlich.`;
-
-      const creativeInstruction = `Du bist die 'Creative Brainstorming Engine'.
-      - Sei aktiv, sprich mit dem Nutzer.
-      - Nutze 'provide_smart_suggestion', um das Gespräch zu lenken oder tiefergehende Fragen zu stellen.
-      - Hilf beim Strukturieren von wilden Ideen.
-      - Nutze Tool-Calls für das visuelle Board parallel zum Gespräch.`;
+      const passiveInstruction = `Du bist die 'Silent Executive Assistant'. Du sprichst NIEMALS. Nutze Tool-Calls 'update_live_presentation' und 'provide_smart_suggestion'. Gruppiere Aufgaben hierarchisch. Aktualisiere das Board kontinuierlich.`;
+      const creativeInstruction = `Du bist die 'Creative Brainstorming Engine'. Sei aktiv, sprich mit dem Nutzer. Nutze 'provide_smart_suggestion', um das Gespräch zu lenken. Nutze Tool-Calls für das Board parallel zum Gespräch.`;
 
       const sessionPromise = ai.live.connect({
         model: 'gemini-2.5-flash-native-audio-preview-09-2025',
@@ -231,6 +232,7 @@ const App: React.FC = () => {
           onopen: () => {
             const source = inputCtx.createMediaStreamSource(stream);
             const scriptProcessor = inputCtx.createScriptProcessor(4096, 1, 1);
+            scriptProcessorRef.current = scriptProcessor;
             scriptProcessor.onaudioprocess = (e) => {
               if (inputCtx.state === 'closed') return;
               const inputData = resample(e.inputBuffer.getChannelData(0), inputCtx.sampleRate, 16000);
@@ -273,20 +275,12 @@ const App: React.FC = () => {
               if (rawInput) {
                 const refinedInput = await refineText(rawInput);
                 setState(prev => ({
-                  ...prev,
-                  transcript: [
-                    ...prev.transcript,
-                    { id: crypto.randomUUID(), role: 'user', text: refinedInput, timestamp: Date.now() }
-                  ]
+                  ...prev, transcript: [...prev.transcript, { id: crypto.randomUUID(), role: 'user', text: refinedInput, timestamp: Date.now() }]
                 }));
               }
               if (output) {
                 setState(prev => ({
-                  ...prev,
-                  transcript: [
-                    ...prev.transcript,
-                    { id: crypto.randomUUID(), role: 'assistant', text: output, timestamp: Date.now() }
-                  ]
+                  ...prev, transcript: [...prev.transcript, { id: crypto.randomUUID(), role: 'assistant', text: output, timestamp: Date.now() }]
                 }));
               }
             }
@@ -304,7 +298,11 @@ const App: React.FC = () => {
               }
             }
           },
-          onerror: (e) => console.error("Live API Error:", e),
+          onerror: (e) => {
+            console.error("Live API Error:", e);
+            setErrorMsg("Verbindungsfehler zur KI. Bitte erneut versuchen.");
+            stopSession();
+          },
           onclose: () => stopSession()
         },
         config: {
@@ -312,18 +310,24 @@ const App: React.FC = () => {
           inputAudioTranscription: {},
           outputAudioTranscription: {},
           tools: [
-            { functionDeclarations: [updatePresentationTool, smartSuggestionTool] }, 
-            { googleSearch: {} }
+            { functionDeclarations: [updatePresentationTool, smartSuggestionTool] }
           ],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } },
           systemInstruction: activeMode ? creativeInstruction : passiveInstruction
         }
       });
       sessionRef.current = sessionPromise;
-    } catch (err) { console.error(err); }
+    } catch (err) { 
+      console.error(err); 
+      setErrorMsg("Kamera oder Mikrofon Zugriff verweigert.");
+    }
   };
 
   const stopSession = () => {
+    if (scriptProcessorRef.current) {
+      scriptProcessorRef.current.disconnect();
+      scriptProcessorRef.current = null;
+    }
     if (audioContextInRef.current && audioContextInRef.current.state !== 'closed') {
       audioContextInRef.current.close().catch(console.error);
     }
@@ -390,6 +394,12 @@ const App: React.FC = () => {
         </div>
 
         <div className="flex-1 p-4 space-y-6 overflow-y-auto custom-scrollbar">
+          {errorMsg && (
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-[11px] text-red-400 font-bold leading-relaxed">
+              {errorMsg}
+            </div>
+          )}
+
           <div className="space-y-2">
             <span className="hidden lg:block text-[10px] font-black text-slate-600 uppercase tracking-widest px-4 mb-2">Workspace</span>
             
@@ -503,26 +513,4 @@ const App: React.FC = () => {
         )}
 
         {state.isActive && (
-          <div className={`fixed bottom-10 right-10 px-8 py-4 rounded-3xl shadow-2xl flex items-center gap-4 border border-white/10 backdrop-blur-3xl z-[100] transition-all duration-500 ${isCreativeMode ? 'bg-purple-600/40 border-purple-500/30' : 'bg-indigo-600/40 border-indigo-500/30'}`}>
-            <div className={`w-3 h-3 rounded-full animate-ping ${isCreativeMode ? 'bg-purple-400' : 'bg-indigo-400'}`}></div>
-            <span className="text-xs font-black uppercase tracking-[0.4em] drop-shadow-md">
-              {isCreativeMode ? 'Creative Sync active' : 'Passive Protocol active'}
-            </span>
-          </div>
-        )}
-      </main>
-
-      <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes celebration-particle {
-          0% { transform: translate(0, 0) scale(1.5); opacity: 1; filter: blur(0px); }
-          100% { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; filter: blur(4px); }
-        }
-        .animate-celebration-particle {
-          animation: celebration-particle 1.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
-        }
-      `}} />
-    </div>
-  );
-};
-
-export default App;
+          <div className={`fixed bottom-10 right-10 px-8 py-4 rounded-3xl shadow-2xl flex items-center gap-4 border border-white/10 backdrop-blur-3xl z-[100] transition-all duration-500 ${isCreativeMode ? 'bg-purple-600/40 border-purple
