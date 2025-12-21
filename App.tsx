@@ -513,4 +513,26 @@ const App: React.FC = () => {
         )}
 
         {state.isActive && (
-          <div className={`fixed bottom-10 right-10 px-8 py-4 rounded-3xl shadow-2xl flex items-center gap-4 border border-white/10 backdrop-blur-3xl z-[100] transition-all duration-500 ${isCreativeMode ? 'bg-purple-600/40 border-purple
+          <div className={`fixed bottom-10 right-10 px-8 py-4 rounded-3xl shadow-2xl flex items-center gap-4 border border-white/10 backdrop-blur-3xl z-[100] transition-all duration-500 ${isCreativeMode ? 'bg-purple-600/40 border-purple-500/30' : 'bg-indigo-600/40 border-indigo-500/30'}`}>
+            <div className={`w-3 h-3 rounded-full animate-ping ${isCreativeMode ? 'bg-purple-400' : 'bg-indigo-400'}`}></div>
+            <span className="text-xs font-black uppercase tracking-[0.4em] drop-shadow-md">
+              {isCreativeMode ? 'Creative Sync active' : 'Passive Protocol active'}
+            </span>
+          </div>
+        )}
+      </main>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes celebration-particle {
+          0% { transform: translate(0, 0) scale(1.5); opacity: 1; filter: blur(0px); }
+          100% { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; filter: blur(4px); }
+        }
+        .animate-celebration-particle {
+          animation: celebration-particle 1.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+        }
+      `}} />
+    </div>
+  );
+};
+
+export default App;
