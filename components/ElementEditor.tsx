@@ -2,6 +2,7 @@ import * as React from 'react';
 import { useState, useRef } from 'react';
 import { SlideElement } from './PresentationEditor';
 import '../styles/element-editor.css';
+import '../styles/element-editor-extended.css';
 
 // ============================================================================
 // ELEMENT EDITOR COMPONENT
@@ -86,32 +87,18 @@ const ElementEditor: React.FC<ElementEditorProps> = ({
     onElementChange(updatedElement);
   };
 
+  // Helfer-Funktion für dynamische CSS-Variablen - entfernt, da CSS-Klassen verwendet werden
+  // Die Klasse .element-dynamic-pos in element-editor.css behandelt alle dynamischen Styles
+
   const getElementPreview = () => {
     switch (element.type) {
       case 'text':
         return (
           <div
-            className="relative"
-            style={{
-              position: 'absolute',
-              left: element.position.x,
-              top: element.position.y,
-              width: element.size.width,
-              height: element.size.height,
-              fontSize: element.style?.fontSize || 16,
-              fontFamily: element.style?.fontFamily || 'Inter, sans-serif',
-              color: element.style?.color || '#000000',
-              backgroundColor: element.style?.backgroundColor || 'transparent',
-              border: element.style?.borderWidth ? `${element.style.borderWidth}px solid ${element.style.borderColor}` : 'none',
-              borderRadius: element.style?.borderRadius || 0,
-              opacity: element.style?.opacity || 1,
-              transform: element.style?.rotation ? `rotate(${element.style.rotation}deg)` : 'none',
-              display: 'flex',
-              alignItems: 'center',
-              padding: '8px',
-              outline: '2px solid #3b82f6',
-              outlineOffset: '2px'
-            }}
+            className={`element-text element-dynamic-pos ${
+              element.style?.borderWidth ? 'has-border' : ''
+            }`}
+            /* Inline Styles entfernt - verwendet .element-dynamic-pos Klasse */
             onClick={() => setIsEditing(true)}
           >
             {isEditing ? (
@@ -143,57 +130,31 @@ const ElementEditor: React.FC<ElementEditorProps> = ({
       case 'image':
         return (
           <div
-            className="relative cursor-pointer"
-            style={{
-              position: 'absolute',
-              left: element.position.x,
-              top: element.position.y,
-              width: element.size.width,
-              height: element.size.height,
-              borderRadius: element.style?.borderRadius || 0,
-              opacity: element.style?.opacity || 1,
-              transform: element.style?.rotation ? `rotate(${element.style.rotation}deg)` : 'none'
-            }}
+            className="element-image element-dynamic-pos"
+            /* Inline Styles entfernt - verwendet .element-dynamic-pos Klasse */
           >
             <img
               src={element.content?.src || 'https://via.placeholder.com/200x150?text=Bild'}
               alt={element.content?.alt || `Bearbeitbares Element: ${element.type} mit ID ${element.id}`}
-              className="w-full h-full object-cover rounded"
-              style={{ borderRadius: element.style?.borderRadius || 0 }}
+              className="w-full h-full object-cover element-image-radius"
             />
-            <div className="absolute inset-0 border-2 border-dashed border-indigo-500 rounded opacity-50" />
+            <div className="element-image-overlay" />
           </div>
         );
 
       case 'shape':
-        const shapeStyle = {
-          position: 'absolute' as const,
-          left: element.position.x,
-          top: element.position.y,
-          width: element.size.width,
-          height: element.size.height,
-          backgroundColor: element.style?.backgroundColor || '#3b82f6',
-          border: element.style?.borderWidth ? `${element.style.borderWidth}px solid ${element.style.borderColor}` : 'none',
-          borderRadius: element.style?.borderRadius || 0,
-          opacity: element.style?.opacity || 1,
-          transform: element.style?.rotation ? `rotate(${element.style.rotation}deg)` : 'none'
-        };
-
         const shape = element.content?.shape || 'rectangle';
         
         return (
           <div className="relative">
             <div
-              className="border-2 border-dashed border-indigo-500 rounded"
-              style={shapeStyle}
+              className={`element-shape element-dynamic-pos ${
+                element.style?.borderWidth ? 'has-border' : ''
+              }`}
+              /* Inline Styles entfernt - verwendet .element-dynamic-pos Klasse */
             >
               {shape === 'circle' ? (
-                <div
-                  className="w-full h-full rounded-full"
-                  style={{
-                    backgroundColor: element.style?.backgroundColor || '#3b82f6'
-                  }}
-                />
+                <div className="element-circle" />
               ) : (
                 <div className="w-full h-full" />
               )}
@@ -204,19 +165,12 @@ const ElementEditor: React.FC<ElementEditorProps> = ({
       default:
         return (
           <div
-            className="relative border-2 border-dashed border-indigo-500 rounded"
-            style={{
-              position: 'absolute',
-              left: element.position.x,
-              top: element.position.y,
-              width: element.size.width,
-              height: element.size.height,
-              backgroundColor: element.style?.backgroundColor || 'transparent',
-              borderRadius: element.style?.borderRadius || 0,
-              opacity: element.style?.opacity || 1
-            }}
+            className={`element-default element-dynamic-pos ${
+              element.style?.borderWidth ? 'has-border' : ''
+            }`}
+            /* Inline Styles entfernt - verwendet .element-dynamic-pos Klasse mit --element-rotation: 0deg Default */
           >
-            <div className="absolute inset-0 flex items-center justify-center text-slate-500 text-sm">
+            <div className="element-default-content">
               {element.type}
             </div>
           </div>
@@ -252,14 +206,7 @@ const ElementEditor: React.FC<ElementEditorProps> = ({
         
         {/* Grid Background */}
         <div 
-          className="absolute inset-0 opacity-20"
-          style={{
-            backgroundImage: `
-              linear-gradient(to right, #e5e7eb 1px, transparent 1px),
-              linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)
-            `,
-            backgroundSize: '20px 20px'
-          }}
+          className="absolute inset-0 opacity-20 element-grid"
         />
       </div>
 

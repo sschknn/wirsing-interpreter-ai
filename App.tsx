@@ -19,6 +19,7 @@ import {
   preloadExportMode
 } from './components/LazyComponents';
 import { getAIService } from './services/ServiceLoader';
+import './styles/animations.css';
 
 // Audio Utilities
 function encode(bytes: Uint8Array): string {
@@ -731,7 +732,7 @@ const App: React.FC = () => {
                <div className="space-y-4">
                   <div className="flex gap-1.5 items-center justify-center h-12">
                      {[...Array(5)].map((_, i) => (
-                       <div key={i} className="w-1.5 bg-indigo-500 rounded-full animate-voice-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
+                       <div key={i} className={`w-1.5 bg-indigo-500 rounded-full animate-voice-bounce voice-bounce-delay-${i}`} />
                      ))}
                   </div>
                   <p className="text-[10px] text-center text-slate-400 font-bold uppercase">KI verarbeitet Gedanken...</p>
@@ -866,91 +867,7 @@ const App: React.FC = () => {
         )}
       </main>
 
-      <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes voice-bounce {
-          0%, 100% { transform: scaleY(1) translateY(0); }
-          50% { transform: scaleY(3) translateY(-4px); }
-        }
-        .animate-voice-bounce { animation: voice-bounce 0.8s ease-in-out infinite; }
-        
-        /* Performance optimizations */
-        * {
-          box-sizing: border-box;
-        }
-        
-        .custom-scrollbar {
-          scrollbar-width: thin;
-          scrollbar-color: rgba(99, 102, 241, 0.3) transparent;
-        }
-        
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 6px;
-        }
-        
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: rgba(99, 102, 241, 0.3);
-          border-radius: 3px;
-        }
-        
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: rgba(99, 102, 241, 0.5);
-        }
-        
-        /* GPU acceleration for better performance */
-        .will-change-transform {
-          will-change: transform;
-          transform: translateZ(0);
-        }
-        
-        /* Optimize animations */
-        .transition-all {
-          transition-property: all;
-          transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        
-        /* Prevent layout shifts */
-        .fixed {
-          contain: layout style paint;
-        }
-        
-        /* Cross-browser compatible image rendering */
-        img {
-          image-rendering: -ms-crisp-edges;
-          image-rendering: -moz-crisp-edges;
-          image-rendering: -o-crisp-edges;
-          image-rendering: -webkit-optimize-contrast;
-          image-rendering: crisp-edges;
-        }
-        
-        /* Cross-browser compatible backdrop-filter */
-        .backdrop-blur-xl {
-          -webkit-backdrop-filter: blur(24px);
-          backdrop-filter: blur(24px);
-        }
-        
-        /* Cross-browser compatible text size adjustment */
-        html {
-          -ms-text-size-adjust: 100%;
-          -webkit-text-size-adjust: 100%;
-          text-size-adjust: 100%;
-        }
-        
-        /* Cross-browser compatible scrollbar styling */
-        * {
-          scrollbar-width: thin;
-          scrollbar-color: rgba(99, 102, 241, 0.3) transparent;
-        }
-        
-        /* Optimize focus states */
-        button:focus {
-          outline: 2px solid rgba(99, 102, 241, 0.5);
-          outline-offset: 2px;
-        }
-      `}} />
+
     </div>
   );
 };

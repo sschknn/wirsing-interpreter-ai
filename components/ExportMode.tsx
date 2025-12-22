@@ -164,7 +164,7 @@ const ExportMode: React.FC<ExportModeProps> = ({ data, onClose }) => {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">Export & Teilen</h1>
-            <p className="text-slate-400 mt-1">"{data.title}" in verschiedenen Formaten exportieren</p>
+            <p className="text-slate-400 mt-1">"{data?.title || 'Untitled Presentation'}" in verschiedenen Formaten exportieren</p>
           </div>
           <button
             onClick={onClose}
@@ -324,7 +324,7 @@ const ExportMode: React.FC<ExportModeProps> = ({ data, onClose }) => {
                 <div className="text-center text-slate-400">
                   <DocumentIcon className="w-16 h-16 mx-auto mb-2" />
                   <p className="text-sm">Vorschau wird geladen...</p>
-                  <p className="text-xs mt-1">{data.slides.length} Folien</p>
+                  <p className="text-xs mt-1">{data?.slides?.length || 0} Folien</p>
                 </div>
               </div>
               <div className="text-xs text-slate-500">
@@ -447,15 +447,15 @@ const ExportMode: React.FC<ExportModeProps> = ({ data, onClose }) => {
             <div className="space-y-2 text-sm text-slate-400">
               <div className="flex justify-between">
                 <span>Titel:</span>
-                <span className="text-white">{data.title}</span>
+                <span className="text-white">{data?.title || 'Untitled Presentation'}</span>
               </div>
               <div className="flex justify-between">
                 <span>Folien:</span>
-                <span className="text-white">{data.slides.length}</span>
+                <span className="text-white">{data?.slides?.length || 0}</span>
               </div>
               <div className="flex justify-between">
                 <span>Geschätzte Dauer:</span>
-                <span className="text-white">{Math.max(1, Math.round(data.slides.length * 0.5))} min</span>
+                <span className="text-white">{Math.max(1, Math.round((data?.slides?.length || 0) * 0.5))} min</span>
               </div>
             </div>
           </div>

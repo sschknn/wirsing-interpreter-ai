@@ -43,3 +43,255 @@
     color: #ffffff;
   }
 }
+
+/* Element Base Styles */
+.element-base {
+  position: absolute;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.element-base:hover {
+  transform: scale(1.02);
+}
+
+/* Text Element Styles */
+.element-text {
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Image Element Styles */
+.element-image {
+  border-radius: 0;
+  opacity: 1;
+  transform: none;
+}
+
+.element-image-overlay {
+  position: absolute;
+  inset: 0;
+  border: 2px dashed #6366f1;
+  border-radius: inherit;
+  opacity: 0.5;
+}
+
+/* Shape Element Styles */
+.element-shape {
+  border: 2px dashed #6366f1;
+  border-radius: 0;
+  opacity: 1;
+  transform: none;
+}
+
+/* Grid Background */
+.element-grid {
+  background-image: linear-gradient(to right, #e5e7eb 1px, transparent 1px),
+                    linear-gradient(to bottom, #e5e7eb 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Default Element Styles */
+.element-default {
+  background-color: transparent;
+  border-radius: 0;
+  opacity: 1;
+}
+
+.element-default-content {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  font-size: 0.875rem;
+}
+
+/* Circle shape styles */
+.element-circle {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+}
+
+/* Border styles for elements with custom borders */
+.element-base.has-border {
+  border-style: solid;
+}
+
+/* Element positioning utilities */
+/* Element positioning styles handled by inline CSS custom properties */
+
+/* Dynamic positioning styles for elements - Microsoft Edge Tools konform */
+.element-dynamic-pos {
+  position: absolute;
+  left: var(--element-left, 0px);
+  top: var(--element-top, 0px);
+  width: var(--element-width, 100px);
+  height: var(--element-height, 50px);
+  /* Cross-browser compatible transform with vendor prefixes */
+  -webkit-transform: var(--element-rotation, 0deg);
+  -moz-transform: var(--element-rotation, 0deg);
+  -ms-transform: var(--element-rotation, 0deg);
+  transform: var(--element-rotation, 0deg);
+  /* Fallback properties for older browsers - in correct order for CSS cascading */
+  -webkit-transform-origin: center center;
+  -moz-transform-origin: center center;
+  -ms-transform-origin: center center;
+  /* Modern browser support - standardized property should be last */
+  transform-origin: center center;
+  box-sizing: border-box;
+  overflow: visible;
+  /* Cross-browser user-select with fallbacks */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Position and size utility classes */
+.element-position-absolute {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+/* Dynamic font styles */
+.element-font-dynamic {
+  font-family: 'Inter', sans-serif;
+  line-height: 1.5;
+}
+
+/* Dynamic color styles */
+.element-color-dynamic {
+  color: inherit;
+}
+
+.element-bg-color-dynamic {
+  background-color: transparent;
+}
+
+/* Dynamic border styles */
+.element-border-dynamic {
+  border: none;
+}
+
+/* Dynamic opacity styles */
+.element-opacity-dynamic {
+  opacity: 1;
+}
+
+/* Dynamic transform styles with proper vendor prefixes */
+.element-transform-dynamic {
+  transform: none;
+  /* Fallback properties for older browsers - in correct order for CSS cascading */
+  -webkit-transform-origin: center center;
+  -moz-transform-origin: center center;
+  -ms-transform-origin: center center;
+  /* Modern browser support - standardized property should be last */
+  transform-origin: center center;
+}
+
+/* Font and text styles */
+.element-font-default {
+  font-size: 16px;
+  font-family: 'Inter', sans-serif;
+}
+
+/* Custom font styles applied dynamically via inline styles */
+
+/* Color styles */
+.element-text-color {
+  color: #000000;
+}
+
+.element-bg-color {
+  background-color: transparent;
+}
+
+/* Border styles */
+.element-border-default {
+  border: none;
+}
+
+/* Custom border applied dynamically via inline styles */
+
+/* Border radius styles */
+.element-radius-default {
+  border-radius: 0;
+}
+
+/* Custom border radius applied dynamically via inline styles */
+
+/* Opacity styles */
+.element-opacity-default {
+  opacity: 1;
+}
+
+/* Custom opacity applied dynamically via inline styles */
+
+/* Transform styles */
+.element-transform-default {
+  transform: none;
+}
+
+/* Custom transform applied dynamically via inline styles */
+
+/* Image specific styles */
+.element-image-base {
+  border-radius: 0;
+  opacity: 1;
+  transform: none;
+}
+
+/* Shape specific styles */
+.element-shape-base {
+  border: 2px dashed #6366f1;
+  border-radius: 0;
+  opacity: 1;
+  transform: none;
+  background-color: #3b82f6;
+}
+
+/* Circle shape background */
+.element-circle-bg {
+  background-color: #3b82f6;
+}
+
+/* Default element styles */
+.element-default-base {
+  background-color: transparent;
+  border-radius: 0;
+  opacity: 1;
+}
+
+/* Image border radius override */
+.element-image-radius {
+  border-radius: inherit;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .element-base {
+    cursor: touch;
+  }
+  
+  .element-text {
+    padding: 6px;
+    outline-width: 1px;
+  }
+  
+  .element-font-default {
+    font-size: 14px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .element-font-default {
+    font-size: 18px;
+  }
+}

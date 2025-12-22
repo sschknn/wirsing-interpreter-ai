@@ -1,11 +1,11 @@
 import * as React from 'react';
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { PresentationData, Slide, AppModeType, Priority } from '../types';
-import { AIService, SlideContent } from '../services/aiService';
+import { AIService } from '../services/aiService';
 import SlideNavigation from './SlideNavigation';
 import ElementToolbar from './ElementToolbar';
 import PropertiesPanel from './PropertiesPanel';
-import ElementEditor from './ElementEditor';
+
 import SlideTemplates from './SlideTemplates';
 import { 
   ChevronLeftIcon, 
@@ -109,7 +109,7 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
     return editorState.presentationData.slides[editorState.currentSlide];
   }, [editorState.presentationData, editorState.currentSlide]);
 
-  const totalSlides = editorState.presentationData.slides.length;
+  const totalSlides = editorState.presentationData?.slides?.length || 0;
 
   // ============================================================================
   // HISTORY MANAGEMENT
@@ -404,7 +404,10 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
         switch (event.key) {
           case 'Delete':
           case 'Backspace':
-            // Delete selected element
+            if (editorState.selectedElement) {
+              event.preventDefault();
+              deleteElement(editorState.selectedElement);
+            }
             break;
           case 'F5':
             event.preventDefault();
@@ -426,6 +429,13 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
     setEditorState(prev => ({ ...prev, zoom: Math.max(25, Math.min(200, newZoom)) }));
   }, []);
 
+  // CSS Variable für Zoom setzen (ersetzt Inline-Styles)
+  useEffect(() => {
+    if (canvasRef.current) {
+      canvasRef.current.style.setProperty('--zoom-scale', `${editorState.zoom / 100}`);
+    }
+  }, [editorState.zoom]);
+
   const toggleGrid = useCallback(() => {
     setEditorState(prev => ({ ...prev, gridEnabled: !prev.gridEnabled }));
   }, []);
@@ -438,20 +448,64 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
     setEditorState(prev => ({ ...prev, selectedElement: elementId }));
   }, []);
 
-  const addElement = useCallback((element: SlideElement) => {
-    // Element hinzufügen Logik
-    console.log('Element hinzufügen:', element);
+  const addElement = useCallback((element: SlideElement): void => {
+    // Element hinzufügen Logik - TODO: Implementiere vollständige Funktionalität
+    // Implementierung folgt in zukünftigen Iterationen
   }, []);
 
-  const updateElement = useCallback((elementId: string, updates: Partial<SlideElement>) => {
-    // Element aktualisieren Logik
-    console.log('Element aktualisieren:', elementId, updates);
+  const updateElement = useCallback((elementId: string, updates: Partial<SlideElement>): void => {
+    // Element aktualisieren Logik - TODO: Implementiere vollständige Funktionalität
+    // Implementierung folgt in zukünftigen Iterationen
   }, []);
 
   const deleteElement = useCallback((elementId: string) => {
-    // Element löschen Logik
-    console.log('Element löschen:', elementId);
-  }, []);
+    if (!currentSlide || !elementId) return;
+    
+    const elementToDelete = currentSlide.items.find((_, index) => 
+      index.toString() === elementId
+    );
+    
+    if (!elementToDelete) return;
+    
+    // Element aus der aktuellen Folie entfernen
+    const newSlides = editorState.presentationData.slides.map((slide, index) => {
+      if (index === editorState.currentSlide) {
+        return {
+          ...slide,
+          items: slide.items.filter((_, itemIndex) => itemIndex.toString() !== elementId)
+        };
+      }
+      return slide;
+    });
+    
+    const newData = {
+      ...editorState.presentationData,
+      slides: newSlides
+    };
+    
+    // History-Eintrag erstellen
+    const change: SlideChange = {
+      type: 'element_removed',
+      elementId: elementId,
+      slideIndex: editorState.currentSlide,
+      data: { element: elementToDelete },
+      timestamp: Date.now()
+    };
+    
+    addToHistory(change);
+    
+    // State aktualisieren
+    setEditorState(prev => ({
+      ...prev,
+      presentationData: newData,
+      selectedElement: null
+    }));
+    
+    // Parent-Komponente benachrichtigen
+    onDataChange(newData);
+    
+    // Element erfolgreich gelöscht - Logging entfernt für Produktionsumgebung
+  }, [currentSlide, editorState.presentationData, editorState.currentSlide, editorState.selectedElement, addToHistory, onDataChange]);
 
   // ============================================================================
   // RENDER
@@ -647,7 +701,9 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
           <div className="w-16 bg-slate-950 border-r border-white/5">
             <ElementToolbar
               onElementAdd={addElement}
-              onElementTypeSelect={(type) => console.log('Element type selected:', type)}
+              onElementTypeSelect={(type) => {
+                // Element type selected - TODO: Implementiere vollständige Funktionalität
+              }}
               selectedElement={editorState.selectedElement}
             />
           </div>
@@ -656,11 +712,7 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
           <div className="flex-1 relative bg-slate-800 overflow-hidden">
             <div
               ref={canvasRef}
-              className="w-full h-full flex items-center justify-center p-8"
-              style={{ 
-                transform: `scale(${editorState.zoom / 100})`,
-                transformOrigin: 'center'
-              }}
+              className="presentation-canvas-wrapper canvas-zoom-transform"
             >
               {/* Slide Canvas */}
               <div className={`

@@ -11,20 +11,31 @@ interface PresentationViewerProps {
 const PresentationViewer: React.FC<PresentationViewerProps> = ({ data, onClose }) => {
   const [index, setIndex] = useState(0);
 
+  // Null-Safety-Check für data und slides
+  const safeData = data || { title: '', subtitle: '', slides: [] };
+  const slidesLength = safeData.slides?.length || 0;
+
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight' || e.key === ' ') setIndex(i => Math.min(data.slides.length, i + 1));
+      if (e.key === 'ArrowRight' || e.key === ' ') setIndex(i => Math.min(slidesLength, i + 1));
       if (e.key === 'ArrowLeft') setIndex(i => Math.max(0, i - 1));
       if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [data.slides.length, onClose]);
+  }, [slidesLength, onClose]);
 
   const renderSlide = () => {
     // Check if data and slides exist
-    if (!data || !data.slides || data.slides.length === 0) {
-      return null;
+    if (!safeData || !safeData.slides || safeData.slides.length === 0) {
+      return (
+        <div className="h-full flex items-center justify-center text-center animate-in zoom-in-95 fade-in duration-1000">
+          <div>
+            <h1 className="text-4xl font-bold text-white mb-4">Keine Folien verfügbar</h1>
+            <p className="text-slate-400">Die Präsentation enthält keine Folien.</p>
+          </div>
+        </div>
+      );
     }
 
     // Cinematic Title Slide
@@ -33,10 +44,10 @@ const PresentationViewer: React.FC<PresentationViewerProps> = ({ data, onClose }
         <div className="h-full flex flex-col items-center justify-center text-center animate-in zoom-in-95 fade-in duration-1000">
           <div className="w-24 h-[1px] bg-indigo-500/50 mb-16" />
           <h1 className="text-8xl lg:text-[11rem] font-black text-white tracking-tighter mb-12 leading-[0.8] drop-shadow-2xl">
-            {data.title}
+            {safeData.title || 'Untitled Presentation'}
           </h1>
           <p className="text-3xl lg:text-5xl text-slate-500 font-medium tracking-tight max-w-5xl mx-auto">
-            {data.subtitle}
+            {safeData.subtitle || ''}
           </p>
           <div className="mt-24 flex items-center gap-4 text-indigo-500/30 font-bold uppercase tracking-[0.6em] text-[10px]">
              <div className="w-2 h-2 rounded-full bg-indigo-500 animate-ping" />
@@ -46,7 +57,7 @@ const PresentationViewer: React.FC<PresentationViewerProps> = ({ data, onClose }
       );
     }
 
-    const slide = data.slides[index - 1];
+    const slide = safeData.slides[index - 1];
     if (!slide || !slide.items) return null;
 
     const featuredImage = slide.items.find(i => i && i.imageUrl)?.imageUrl;
@@ -111,7 +122,7 @@ const PresentationViewer: React.FC<PresentationViewerProps> = ({ data, onClose }
       <div className="absolute top-0 left-0 w-full h-2 bg-white/5">
         <div 
           className="h-full bg-indigo-600 transition-all duration-1000 ease-out shadow-[0_0_25px_rgba(79,70,229,0.6)]" 
-          style={{ width: `${data.slides.length > 0 ? (index / data.slides.length) * 100 : 0}%` }} 
+          style={{ width: `${slidesLength > 0 ? (index / slidesLength) * 100 : 0}%` }} 
         />
       </div>
 
@@ -139,8 +150,8 @@ const PresentationViewer: React.FC<PresentationViewerProps> = ({ data, onClose }
              <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path d="M15 19l-7-7 7-7" /></svg>
            </button>
            <button 
-             onClick={() => setIndex(i => Math.min(data.slides.length, i + 1))}
-             disabled={index >= data.slides.length}
+             onClick={() => setIndex(i => Math.min(slidesLength, i + 1))}
+             disabled={index >= slidesLength}
              className="p-10 rounded-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-5 transition-all text-white shadow-3xl shadow-indigo-600/40 border border-indigo-400/20 active:scale-90"
            >
              <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path d="M9 5l7 7-7 7" /></svg>

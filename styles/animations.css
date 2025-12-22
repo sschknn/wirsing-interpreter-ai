@@ -1,0 +1,23 @@
+/* ============================================================================
+   ANIMATION STYLES - Externalized from App.tsx
+   ============================================================================ */
+
+@keyframes voice-bounce {
+  0%, 100% { 
+    transform: scaleY(1) translateY(0); 
+  }
+  50% { 
+    transform: scaleY(3) translateY(-4px); 
+  }
+}
+
+.animate-voice-bounce { 
+  animation: voice-bounce 0.8s ease-in-out infinite; 
+}
+
+/* Animation delay variants for staggered effects */
+.voice-bounce-delay-0 { animation-delay: 0s; }
+.voice-bounce-delay-1 { animation-delay: 0.15s; }
+.voice-bounce-delay-2 { animation-delay: 0.3s; }
+.voice-bounce-delay-3 { animation-delay: 0.45s; }
+.voice-bounce-delay-4 { animation-delay: 0.6s; }

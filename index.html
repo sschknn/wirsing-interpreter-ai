@@ -3,10 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Cross-browser compatible theme color -->
+    <!-- Progressive Enhancement for theme-color with cross-browser compatibility -->
+    <!-- Modern browsers (Chrome, Edge) -->
     <meta name="theme-color" content="#020617">
+    <!-- Fallback for older browsers that don't support theme-color -->
     <meta name="msapplication-navbutton-color" content="#020617">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <!-- Additional fallback for maximum compatibility -->
+    <meta name="msapplication-TileColor" content="#020617">
+    <!-- Web App Configuration -->
+    <meta name="application-name" content="AI Secretary">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <!-- SEO Meta Tags -->
@@ -14,28 +20,52 @@
     <meta name="keywords" content="AI, Secretary, Executive, Briefing, Presentation, KI, Präsentation, Assistent">
     <meta name="author" content="AI Secretary Team">
     <meta name="robots" content="index, follow">
-    <link rel="canonical" href="">
+    <meta name="language" content="de">
+    <meta name="geo.region" content="DE">
+    <meta name="geo.placename" content="Deutschland">
+    <link rel="canonical" href="https://wirsing-interpreter-ai.vercel.app/">
     
-    <!-- Permissions Policy - Mikrofon erlauben -->
-    <meta http-equiv="Permissions-Policy" content="microphone=(self), camera=(), geolocation=()">
+    <!-- Permissions Policy - Mikrofon und Kamera erlauben -->
+    <meta http-equiv="Permissions-Policy" content="microphone=(self), camera=(self), geolocation=()">
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="favicon.ico" type="image/x-icon">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="favicon.svg">
     <link rel="shortcut icon" href="favicon.ico">
     <title>AI Secretary • Live Executive Briefing</title>
+    <!-- Preconnect for faster font loading -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Preload critical font files for performance -->
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet"></noscript>
 
 <style>
   body {
     font-family: 'Inter', sans-serif;
     overscroll-behavior-y: contain; /* Verhindert Pull-to-refresh auf Android */
-    -webkit-text-size-adjust: 100%;
-    -ms-text-size-adjust: 100%;
-    /* Standard text-size-adjust für moderne Browser - nach Prefixes */
+    
+    /* Cross-browser text-size-adjust with proper vendor prefixes and fallbacks */
+    /* Standard property first for modern browsers */
     text-size-adjust: 100%;
+    
+    /* Safari and older WebKit browsers */
+    -webkit-text-size-adjust: 100%;
+    /* Microsoft browsers (legacy support) */
+    -ms-text-size-adjust: 100%;
+    
+    /* Additional cross-browser improvements */
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-font-smoothing: antialiased;
+  }
+  
+  /* Feature detection and progressive enhancement for text-size-adjust */
+  @supports not (text-size-adjust: 100%) {
+    body {
+      /* Fallback for browsers that don't support text-size-adjust */
+      -webkit-text-size-adjust: 100%;
+      -ms-text-size-adjust: 100%;
+    }
   }
   .font-mono { font-family: 'JetBrains Mono', monospace; }
   .custom-scrollbar::-webkit-scrollbar { width: 4px; }
@@ -46,12 +76,26 @@
   .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
   .pt-safe { padding-top: env(safe-area-inset-top); }
   
-  /* Cross-browser compatible scrollbar styling */
-  /* Standard scrollbar styling (modern browsers) */
+  /* Cross-browser compatible scrollbar styling with progressive enhancement */
   * {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(99, 102, 241, 0.3) transparent;
+    /* Legacy browser fallback properties (IE, older browsers) */
+    scrollbar-base-color: rgba(99, 102, 241, 0.3);
+    scrollbar-face-color: rgba(99, 102, 241, 0.3);
+    scrollbar-3dlight-color: rgba(99, 102, 241, 0.1);
+    scrollbar-highlight-color: rgba(99, 102, 241, 0.1);
+    scrollbar-shadow-color: rgba(99, 102, 241, 0.1);
+    scrollbar-darkshadow-color: rgba(99, 102, 241, 0.1);
   }
+  
+  /* Modern browsers (Chrome 121+, Firefox) with proper feature detection */
+  @supports (scrollbar-width: thin) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(99, 102, 241, 0.3) transparent;
+    }
+  }
+  
+  /* Browser-specific fallbacks are handled by the @supports rules above */
   
   /* Webkit scrollbar styling (Safari, older Chrome) */
   *::-webkit-scrollbar {
@@ -77,5 +121,59 @@
 <body class="bg-[#020617] text-slate-200">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
+    
+    <!-- Enhanced theme color fallback for maximum browser compatibility -->
+    <script>
+        (function() {
+            // Enhanced fallback for theme-color with better browser detection
+            function setThemeColor() {
+                var themeColor = '#020617';
+                
+                // Try to set theme-color for various browser contexts
+                try {
+                    // Standard theme-color for modern browsers
+                    var themeMeta = document.querySelector('meta[name="theme-color"]');
+                    if (!themeMeta) {
+                        themeMeta = document.createElement('meta');
+                        themeMeta.name = 'theme-color';
+                        themeMeta.content = themeColor;
+                        document.head.appendChild(themeMeta);
+                    }
+                    
+                    // Microsoft specific
+                    var msMeta = document.querySelector('meta[name="msapplication-navbutton-color"]');
+                    if (!msMeta) {
+                        msMeta = document.createElement('meta');
+                        msMeta.name = 'msapplication-navbutton-color';
+                        msMeta.content = themeColor;
+                        document.head.appendChild(msMeta);
+                    }
+                    
+                    // Apple specific
+                    var appleMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+                    if (!appleMeta) {
+                        appleMeta = document.createElement('meta');
+                        appleMeta.name = 'apple-mobile-web-app-status-bar-style';
+                        appleMeta.content = 'black-translucent';
+                        document.head.appendChild(appleMeta);
+                    }
+                    
+                    // Set CSS custom property for CSS-based theming
+                    document.documentElement.style.setProperty('--theme-color', themeColor);
+                    
+                } catch (e) {
+                    // Fallback for browsers that don't support these features
+                    console.warn('Theme color setup failed:', e);
+                }
+            }
+            
+            // Run immediately and on DOM ready
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', setThemeColor);
+            } else {
+                setThemeColor();
+            }
+        })();
+    </script>
 </body>
 </html>

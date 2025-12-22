@@ -1,0 +1,185 @@
+/* Erweiterte Element Editor Styles - Microsoft Edge Tools konform */
+
+/* ===================================================================
+   ELEMENT POSITIONING STYLES (Dynamic - bleiben inline)
+   =================================================================== */
+
+/* ===================================================================
+   ELEMENT BASE STYLES (Static - werden als CSS-Klassen verwendet)
+   =================================================================== */
+
+/* Text Element Styles */
+.element-text {
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+  font-size: 16px;
+  font-family: 'Inter', sans-serif;
+  color: #000000;
+  background-color: transparent;
+  border: none;
+  border-radius: 0;
+  opacity: 1;
+  transform: none;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.element-text:hover {
+  transform: scale(1.02);
+}
+
+.element-text.has-border {
+  border: 2px solid #6366f1;
+}
+
+/* Image Element Styles */
+.element-image {
+  border-radius: 0;
+  opacity: 1;
+  transform: none;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s ease-in-out;
+  display: block;
+  overflow: hidden;
+}
+
+.element-image:hover {
+  transform: scale(1.02);
+}
+
+.element-image-overlay {
+  position: absolute;
+  inset: 0;
+  border: 2px dashed #6366f1;
+  border-radius: inherit;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Shape Element Styles */
+.element-shape {
+  border: 2px dashed #6366f1;
+  border-radius: 0;
+  opacity: 1;
+  transform: none;
+  background-color: #3b82f6;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.element-shape:hover {
+  transform: scale(1.02);
+}
+
+.element-shape.has-border {
+  border-style: solid;
+}
+
+.element-circle {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background-color: #3b82f6;
+}
+
+/* Default Element Styles */
+.element-default {
+  background-color: transparent;
+  border-radius: 0;
+  opacity: 1;
+  border: 2px dashed #6366f1;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.element-default:hover {
+  transform: scale(1.02);
+}
+
+.element-default-content {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  font-size: 0.875rem;
+  pointer-events: none;
+}
+
+/* ===================================================================
+   RESPONSIVE DESIGN
+   =================================================================== */
+
+@media (max-width: 768px) {
+  .element-text {
+    padding: 6px;
+    outline-width: 1px;
+    font-size: 14px;
+  }
+  
+  .element-base {
+    cursor: touch;
+  }
+}
+
+@media (min-width: 1024px) {
+  .element-text {
+    font-size: 18px;
+  }
+}
+
+/* ===================================================================
+   ACCESSIBILITY & HIGH CONTRAST
+   =================================================================== */
+
+@media (prefers-contrast: high) {
+  .element-text {
+    color: #000000;
+    background-color: #ffffff;
+  }
+  
+  .element-shape {
+    background-color: #000000;
+    border-color: #ffffff;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .element-text {
+    color: #ffffff;
+  }
+  
+  .element-default-content {
+    color: #94a3b8;
+  }
+}
+
+/* ===================================================================
+   REDUCED MOTION
+   =================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .element-base {
+    transition: none;
+  }
+  
+  .element-base:hover {
+    transform: none;
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "timestamp": "2025-12-22T06:32:07.814Z",
+  "analysisType": "Comprehensive Button & Function Tests",
+  "testResults": {},
+  "buttonTests": {
+    "http://localhost:3000": {
+      "error": "Navigation timeout of 30000 ms exceeded",
+      "status": "failed"
+    },
+    "http://localhost:3001": {
+      "error": "Navigation timeout of 30000 ms exceeded",
+      "status": "failed"
+    },
+    "http://localhost:3002": {
+      "error": "Navigation timeout of 30000 ms exceeded",
+      "status": "failed"
+    },
+    "http://localhost:3003": {
+      "error": "Navigation timeout of 30000 ms exceeded",
+      "status": "failed"
+    }
+  },
+  "errorLogs": [],
+  "screenshots": [],
+  "summary": {
+    "totalButtons": 0,
+    "workingButtons": 0,
+    "brokenButtons": 0,
+    "totalTests": 0,
+    "passedTests": 0,
+    "failedTests": 0
+  }
+}
