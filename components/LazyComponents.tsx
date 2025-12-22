@@ -272,14 +272,24 @@ interface ExportModeLazyProps {
 // CONVENIENCE WRAPPERS
 // ============================================================================
 
-export const LazyPresentationEditorWrapper: React.FC<PresentationEditorLazyProps> = (props: PresentationEditorLazyProps) => (
-  <LazyComponent
-    fallback={<EditorLoading />}
-    componentName="Presentation Editor"
-  >
-    <LazyPresentationEditorComponent />
-  </LazyComponent>
-);
+export const LazyPresentationEditorWrapper: React.FC<PresentationEditorLazyProps> = (props: PresentationEditorLazyProps) => {
+  // DEBUG: Props validieren
+  console.log('🔍 [LazyPresentationEditorWrapper] Empfangene Props:', {
+    hasData: !!props.data,
+    hasOnDataChange: typeof props.onDataChange === 'function',
+    hasOnModeChange: typeof props.onModeChange === 'function',
+    disabled: props.disabled
+  });
+  
+  return (
+    <LazyComponent
+      fallback={<EditorLoading />}
+      componentName="Presentation Editor"
+    >
+      <LazyPresentationEditorComponent {...props} />
+    </LazyComponent>
+  );
+};
 
 export const LazyPresentationViewerWrapper: React.FC<PresentationViewerLazyProps> = (props: PresentationViewerLazyProps) => (
   <LazyComponent
@@ -304,7 +314,7 @@ export const LazyLiveBriefingPanelWrapper: React.FC<LiveBriefingPanelLazyProps> 
     fallback={<BriefingLoading />}
     componentName="Live Briefing Panel"
   >
-    <LazyLiveBriefingPanelComponent />
+    <LazyLiveBriefingPanelComponent {...props} />
   </LazyComponent>
 );
 
@@ -313,7 +323,7 @@ export const LazyExportModeWrapper: React.FC<ExportModeLazyProps> = (props) => (
     fallback={<ExportLoading />}
     componentName="Export Mode"
   >
-    <LazyExportModeComponent />
+    <LazyExportModeComponent {...props} />
   </LazyComponent>
 );
 

@@ -109,6 +109,12 @@ async function handleFetchRequest(request) {
   const url = new URL(request.url);
   
   try {
+    // Externe APIs: Nur Netzwerk, kein Caching
+    if (shouldSkipCaching(request)) {
+      console.log('🌐 Direkte Netzwerk-Anfrage für:', url.href);
+      return await fetch(request);
+    }
+    
     // API Requests - Network First
     if (url.pathname.startsWith('/api/')) {
       return await networkFirstStrategy(request, DYNAMIC_CACHE_NAME);
@@ -316,6 +322,19 @@ function shouldSkipCaching(request) {
   
   // Skip für WebSocket, Eventsource, etc.
   if (request.headers.get('upgrade') === 'websocket') {
+    return true;
+  }
+  
+  // Skip für externe APIs (Google Gemini, OpenAI, etc.)
+  const externalDomains = [
+    'generativelanguage.googleapis.com',
+    'api.openai.com',
+    'api.anthropic.com',
+    'api.cohere.ai'
+  ];
+  
+  if (externalDomains.some(domain => url.hostname.includes(domain))) {
+    console.log('🚫 Service Worker überspringt externe API:', url.href);
     return true;
   }
   

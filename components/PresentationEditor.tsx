@@ -70,7 +70,7 @@ export interface SlideChange {
 // ============================================================================
 
 interface PresentationEditorProps {
-  data: PresentationData;
+  data?: PresentationData;
   onDataChange: (data: PresentationData) => void;
   onModeChange: (mode: AppModeType) => void;
   disabled?: boolean;
@@ -84,6 +84,28 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
 }: PresentationEditorProps) => {
   const canvasRef = useRef<HTMLDivElement>(null);
   
+  // ============================================================================
+  // DEFAULT PRESENTATION DATA
+  // ============================================================================
+
+  const defaultPresentationData: PresentationData = {
+    title: 'Neue Präsentation',
+    subtitle: 'Erstellen Sie hier Ihre erste Folie',
+    slides: [
+      {
+        title: 'Willkommen zur Präsentation',
+        type: 'content',
+        items: [
+          {
+            text: 'Erstellen Sie hier Ihre erste Folie',
+            category: 'content',
+            priority: Priority.MEDIUM
+          }
+        ]
+      }
+    ]
+  };
+  
   const [editorState, setEditorState] = useState<SlideEditorState>({
     currentSlide: 0,
     selectedElement: null,
@@ -94,7 +116,7 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
     gridEnabled: false,
     showTemplates: false,
     isLoading: false,
-    presentationData: data
+    presentationData: data || defaultPresentationData
   });
 
   // ============================================================================
@@ -156,6 +178,12 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
   // ============================================================================
 
   const addSlide = useCallback((templateType?: string) => {
+    // Null-Safety-Check für presentationData
+    if (!editorState.presentationData || !editorState.presentationData.slides) {
+      console.error('presentationData ist nicht verfügbar');
+      return;
+    }
+
     const newSlide: Slide = {
       title: 'Neue Folie',
       type: (templateType as any) || 'content',
@@ -187,6 +215,12 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
   const deleteSlide = useCallback((slideIndex: number) => {
     if (totalSlides <= 1) return;
 
+    // Null-Safety-Check für presentationData
+    if (!editorState.presentationData || !editorState.presentationData.slides) {
+      console.error('presentationData ist nicht verfügbar');
+      return;
+    }
+
     const slideToDelete = editorState.presentationData.slides[slideIndex];
     const newData = {
       ...editorState.presentationData,
@@ -211,6 +245,12 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
   }, [editorState.presentationData, totalSlides, addToHistory, onDataChange]);
 
   const duplicateSlide = useCallback((slideIndex: number) => {
+    // Null-Safety-Check für presentationData
+    if (!editorState.presentationData || !editorState.presentationData.slides) {
+      console.error('presentationData ist nicht verfügbar');
+      return;
+    }
+
     const slideToDuplicate = editorState.presentationData.slides[slideIndex];
     if (!slideToDuplicate) return;
     
@@ -257,6 +297,12 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
       const suggestions = 'Verbessere das Design und den Inhalt dieser Folie';
       const improvedSlide = await AIService.improveSlide(editorState.currentSlide.toString(), suggestions);
 
+      // Null-Safety-Check für presentationData
+      if (!editorState.presentationData || !editorState.presentationData.slides) {
+        console.error('presentationData ist nicht verfügbar');
+        return;
+      }
+
       const newData = {
         ...editorState.presentationData,
         slides: editorState.presentationData.slides.map((slide, index) =>
@@ -301,6 +347,12 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
         }))
       };
 
+      // Null-Safety-Check für presentationData
+      if (!editorState.presentationData || !editorState.presentationData.slides) {
+        console.error('presentationData ist nicht verfügbar');
+        return;
+      }
+
       const newData = {
         ...editorState.presentationData,
         slides: [...editorState.presentationData.slides, newSlide]
@@ -336,6 +388,12 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
 
       const slidesWithImages = await AIService.addImagesToSlides([currentSlide]);
       const enhancedSlide = slidesWithImages[0];
+
+      // Null-Safety-Check für presentationData
+      if (!editorState.presentationData || !editorState.presentationData.slides) {
+        console.error('presentationData ist nicht verfügbar');
+        return;
+      }
 
       const newData = {
         ...editorState.presentationData,
@@ -467,6 +525,12 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
     
     if (!elementToDelete) return;
     
+    // Null-Safety-Check für presentationData
+    if (!editorState.presentationData || !editorState.presentationData.slides) {
+      console.error('presentationData ist nicht verfügbar');
+      return;
+    }
+
     // Element aus der aktuellen Folie entfernen
     const newSlides = editorState.presentationData.slides.map((slide, index) => {
       if (index === editorState.currentSlide) {
@@ -522,13 +586,19 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
         
         <div className="flex-1 overflow-y-auto">
           <SlideNavigation
-            slides={editorState.presentationData.slides}
+            slides={editorState.presentationData?.slides || []}
             currentSlide={editorState.currentSlide}
             onSlideSelect={(index) => setEditorState(prev => ({ ...prev, currentSlide: index }))}
             onSlideAdd={() => addSlide()}
             onSlideDelete={deleteSlide}
             onSlideDuplicate={duplicateSlide}
             onSlideMove={(fromIndex, toIndex) => {
+              // Null-Safety-Check für presentationData
+              if (!editorState.presentationData || !editorState.presentationData.slides) {
+                console.error('presentationData ist nicht verfügbar');
+                return;
+              }
+              
               const newSlides = [...editorState.presentationData.slides];
               const [movedSlide] = newSlides.splice(fromIndex, 1);
               if (movedSlide) {
@@ -726,7 +796,7 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
                     </h1>
                     
                     <div className="space-y-4">
-                      {currentSlide.items.map((item, index) => (
+                      {(currentSlide.items || []).map((item, index) => (
                         <div key={index} className="flex items-start gap-4">
                           {item.imageUrl && (
                             <img 
@@ -737,7 +807,7 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
                           )}
                           <div className="flex-1">
                             <p className="text-gray-700">{item.text}</p>
-                            {item.subItems && item.subItems.length > 0 && (
+                            {Array.isArray(item.subItems) && item.subItems.length > 0 && (
                               <ul className="ml-4 mt-2 space-y-1">
                                 {item.subItems.map((subItem, subIndex) => (
                                   <li key={subIndex} className="text-gray-600 text-sm">
@@ -775,6 +845,12 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
               slide={currentSlide || null}
               onElementUpdate={updateElement}
               onSlideUpdate={(updates: Partial<Slide>) => {
+                // Null-Safety-Check für presentationData
+                if (!editorState.presentationData || !editorState.presentationData.slides) {
+                  console.error('presentationData ist nicht verfügbar');
+                  return;
+                }
+
                 const newData = {
                   ...editorState.presentationData,
                   slides: editorState.presentationData.slides.map((slide, index) =>

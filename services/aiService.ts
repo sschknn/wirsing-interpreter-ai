@@ -82,28 +82,37 @@ export class AIService {
   private static handleError(error: any, operation: string): never {
     console.error(`KI-Service Fehler (${operation}):`, error);
     
-    if (error.message?.includes('API_KEY')) {
-      throw new Error('API-Schlüssel fehlt oder ist ungültig');
+    // Spezifische Fehlerbehandlung für verschiedene API-Fehlertypen
+    if (error.message?.includes('API_KEY') || error.message?.includes('leaked')) {
+      throw new Error('API-Schlüssel ist ungültig oder wurde als kompromittiert gemeldet. Bitte verwenden Sie einen neuen API-Schlüssel.');
     }
     
-    if (error.message?.includes('quota')) {
-      throw new Error('API-Quota überschritten. Bitte versuchen Sie es später erneut');
+    if (error.message?.includes('quota') || error.message?.includes('RESOURCE_EXHAUSTED') || error.message?.includes('429')) {
+      throw new Error('API-Quota überschritten. Bitte warten Sie eine Stunde und versuchen Sie es erneut.');
     }
     
-    if (error.message?.includes('network')) {
+    if (error.message?.includes('network') || error.message?.includes('fetch')) {
       throw new Error('Netzwerkfehler. Bitte überprüfen Sie Ihre Internetverbindung');
     }
     
-    throw new Error(`KI-Service Fehler bei ${operation}: ${error.message || 'Unbekannter Fehler'}`);
+    if (error.message?.includes('permission') || error.message?.includes('403')) {
+      throw new Error('API-Berechtigung verweigert. Überprüfen Sie Ihren API-Schlüssel und Ihre Berechtigungen.');
+    }
+    
+    // Fallback für unbekannte Fehler
+    const errorMessage = error?.error?.message || error.message || 'Unbekannter KI-Service Fehler';
+    throw new Error(`KI-Service Fehler bei ${operation}: ${errorMessage}`);
   }
 
   /**
    * Hilfsmethode für einheitliche GoogleGenAI-Instanz
    */
   private static getAIInstance(): GoogleGenAI {
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) {
-      throw new Error('API_KEY ist nicht in den Umgebungsvariablen gesetzt');
+    // Browser-Environment: Verwende import.meta.env anstatt process.env
+    const apiKey = import.meta.env.VITE_API_KEY || process.env.API_KEY;
+    
+    if (!apiKey || apiKey === 'your_google_gemini_api_key_here') {
+      throw new Error('VITE_API_KEY ist nicht in den Umgebungsvariablen gesetzt oder ist ein Demo-Platzhalter. Bitte .env Datei mit VITE_API_KEY=ihr_echter_schlüssel erstellen');
     }
     return new GoogleGenAI({ apiKey });
   }
@@ -155,7 +164,7 @@ export class AIService {
   }
 
   /**
-   * Generiert visuelle Inhalte für Folien
+   * Generiert visuelle Inhalte für Folien (mit Fallback)
    */
   static async generateVisual(content: string): Promise<string> {
     const cacheKey = this.getCacheKey('generateVisual', { content });
@@ -185,8 +194,47 @@ export class AIService {
       
       throw new Error('Kein Bild in der KI-Antwort gefunden');
     } catch (error) {
-      this.handleError(error, 'generateVisual');
+      // Fallback: Generiere ein Platzhalter-Bild mit CSS-Gradient
+      console.warn('KI-Bildgenerierung fehlgeschlagen, verwende Fallback:', error);
+      const fallbackImageUrl = this.generateFallbackVisual(content);
+      this.setCachedResult(cacheKey, fallbackImageUrl);
+      return fallbackImageUrl;
     }
+  }
+
+  /**
+   * Fallback-Visualisierung mit CSS-Gradient
+   */
+  private static generateFallbackVisual(content: string): string {
+    // Generiere einen farbigen Gradient basierend auf dem Inhalt
+    const colors = [
+      'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+      'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+      'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+      'linear-gradient(135deg, #fa709a 0%, #fee140 100%)'
+    ];
+    
+    const colorIndex = content.length % colors.length;
+    const gradient = colors[colorIndex];
+    
+    // Erstelle ein SVG mit Gradient als Fallback
+    const svg = `
+      <svg width="400" height="225" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+          </linearGradient>
+        </defs>
+        <rect width="400" height="225" fill="url(#grad1)"/>
+        <text x="200" y="112" font-family="Arial" font-size="16" fill="white" text-anchor="middle" opacity="0.8">
+          ${content.substring(0, 30)}${content.length > 30 ? '...' : ''}
+        </text>
+      </svg>
+    `;
+    
+    return `data:image/svg+xml;base64,${btoa(svg)}`;
   }
 
   /**
@@ -465,6 +513,12 @@ export class AIService {
    * Optimiert das Layout einer gesamten Präsentation
    */
   static async optimizeLayout(slides: Slide[]): Promise<OptimizedLayout> {
+    // Defensive Programmierung: slides Array validieren
+    if (!Array.isArray(slides)) {
+      console.warn('optimizeLayout: slides ist kein Array, verwende leeres Array');
+      slides = [];
+    }
+    
     const cacheKey = this.getCacheKey('optimizeLayout', { slideCount: slides.length });
     const cached = this.getCachedResult<OptimizedLayout>(cacheKey);
     if (cached) return cached;
@@ -508,6 +562,12 @@ export class AIService {
    */
   static async addImagesToSlides(slides: Slide[]): Promise<Slide[]> {
     try {
+      // Defensive Programmierung: slides Array validieren
+      if (!Array.isArray(slides)) {
+        console.warn('addImagesToSlides: slides ist kein Array, returning leeres Array');
+        return [];
+      }
+      
       const enhancedSlides: Slide[] = [];
       
       for (const slide of slides) {

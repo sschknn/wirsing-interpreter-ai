@@ -10,8 +10,33 @@ interface LiveBriefingPanelProps {
   onTogglePoint: (id: string) => void;
 }
 
-const LiveBriefingPanel: React.FC<LiveBriefingPanelProps> = ({ data, completedPoints, onTogglePoint }) => {
-  if (!data) return null;
+const LiveBriefingPanel: React.FC<LiveBriefingPanelProps> = ({ data, completedPoints, onTogglePoint, isLoading }) => {
+  // Debug Logging für Props-Validierung
+  console.log('🔍 [LiveBriefingPanel] Props:', {
+    hasData: !!data,
+    hasSlides: !!(data?.slides),
+    slidesLength: data?.slides?.length || 0,
+    isLoading
+  });
+  
+  // Frühzeitiger Return bei fehlenden Daten
+  if (!data || !data.slides || data.slides.length === 0) {
+    return (
+      <div className="h-full flex items-center justify-center p-8">
+        <div className="text-center">
+          <div className="w-16 h-16 mx-auto mb-4 bg-indigo-500/20 rounded-full flex items-center justify-center">
+            <SparklesIcon className="w-8 h-8 text-indigo-400" />
+          </div>
+          <h3 className="text-lg font-semibold text-white mb-2">Keine Daten verfügbar</h3>
+          <p className="text-slate-400">
+            {!data ? 'Keine Präsentationsdaten vorhanden' : 
+             !data.slides ? 'Keine Folien gefunden' : 
+             'Keine Inhalte verfügbar'}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full overflow-y-auto custom-scrollbar p-6 sm:p-10 lg:p-20 pb-60 animate-in fade-in duration-1000">
@@ -44,7 +69,7 @@ const LiveBriefingPanel: React.FC<LiveBriefingPanelProps> = ({ data, completedPo
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 sm:gap-20">
               <div className="lg:col-span-8 space-y-12 sm:space-y-16">
-                {slide.items.map((item, iIdx) => {
+                {(slide.items || []).map((item, iIdx) => {
                   const id = `${sIdx}-${iIdx}`;
                   const isDone = completedPoints.has(id);
                   return (
@@ -99,7 +124,7 @@ const LiveBriefingPanel: React.FC<LiveBriefingPanelProps> = ({ data, completedPo
                  <div className="lg:sticky lg:top-20 space-y-8 sm:space-y-12">
                    {slide.type === 'gallery' ? (
                      <div className="grid grid-cols-2 lg:grid-cols-1 gap-4 sm:gap-8">
-                        {slide.items.filter(i => i.imageUrl).map((item, idx) => (
+                        {(slide.items || []).filter(i => i.imageUrl).map((item, idx) => (
                           <div key={idx} className="rounded-3xl sm:rounded-[56px] overflow-hidden border border-white/10 aspect-square shadow-xl">
                              <img src={item.imageUrl} className="w-full h-full object-cover" alt={`Gallery-Bild: ${item.text || 'Präsentationsvisualisierung'}`} loading="lazy" />
                           </div>

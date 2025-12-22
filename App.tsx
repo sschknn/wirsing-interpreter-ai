@@ -201,9 +201,14 @@ const App: React.FC = () => {
         // Batch state update for better performance
         setBriefingData(prev => {
           if (!prev) return null;
-          const slides = [...prev.slides];
+          
+          // Defensive Programmierung: slides Array validieren
+          const currentSlides = Array.isArray(prev.slides) ? prev.slides : [];
+          const slides = [...currentSlides];
+          
           if (slides[sIdx]) {
-            const items = [...slides[sIdx].items];
+            const currentItems = Array.isArray(slides[sIdx].items) ? slides[sIdx].items : [];
+            const items = [...currentItems];
             if (items[iIdx]) items[iIdx] = { ...items[iIdx], imageUrl };
             slides[sIdx] = { ...slides[sIdx], items };
           }
