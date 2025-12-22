@@ -1,23 +1,35 @@
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import * as React from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { LiveServerMessage } from '@google/genai';
-import { PresentationData, SecretaryState, SmartSuggestion, SlideItem, AppMode, AppModeType, ToolbarState } from './types';
-import { MicIcon, SparklesIcon, CheckIcon, PresentationIcon, TrashIcon, HistoryIcon } from './components/Icons';
-import LiveBriefingPanel from './components/LiveBriefingPanel';
-import PresentationViewer from './components/PresentationViewer';
-import PresentationEditor from './components/PresentationEditor';
+import { PresentationData, SecretaryState, AppMode, AppModeType, ToolbarState, PresentationInput } from './types';
+import { MicIcon, SparklesIcon, TrashIcon, HistoryIcon } from './components/Icons';
 import MenuBar from './components/MenuBar';
 import ModeSelector from './components/ModeSelector';
 import Toolbar from './components/Toolbar';
-import ExportMode from './components/ExportMode';
-import AdvancedTemplates from './components/AdvancedTemplates';
-import { AIService, PresentationInput } from './services/aiService';
+import { 
+  LazyPresentationEditorWrapper,
+  LazyPresentationViewerWrapper, 
+  LazyAdvancedTemplatesWrapper, 
+  LazyLiveBriefingPanelWrapper,
+  LazyExportModeWrapper,
+  preloadPresentationEditor,
+  preloadPresentationViewer,
+  preloadAdvancedTemplates,
+  preloadExportMode
+} from './components/LazyComponents';
+import { getAIService } from './services/ServiceLoader';
 
 // Audio Utilities
-function encode(bytes: Uint8Array) {
+function encode(bytes: Uint8Array): string {
   let binary = '';
   const len = bytes.byteLength;
-  for (let i = 0; i < len; i++) binary += String.fromCharCode(bytes[i]);
+  for (let i = 0; i < len; i++) {
+    const byte = bytes[i];
+    if (byte !== undefined) {
+      binary += String.fromCharCode(byte);
+    }
+  }
   return btoa(binary);
 }
 
@@ -30,12 +42,15 @@ function decode(base64: string) {
 
 async function decodeAudioData(data: Uint8Array, ctx: AudioContext, sampleRate: number, numChannels: number): Promise<AudioBuffer> {
   const dataInt16 = new Int16Array(data.buffer);
-  const frameCount = dataInt16.length / numChannels;
+  const frameCount = Math.floor(dataInt16.length / numChannels);
   const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
   for (let channel = 0; channel < numChannels; channel++) {
     const channelData = buffer.getChannelData(channel);
     for (let i = 0; i < frameCount; i++) {
-      channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
+      const dataIndex = i * numChannels + channel;
+      if (dataIndex < dataInt16.length && dataInt16[dataIndex] !== undefined) {
+        channelData[i] = dataInt16[dataIndex] / 32768.0;
+      }
     }
   }
   return buffer;
@@ -77,7 +92,7 @@ const App: React.FC = () => {
   });
   const [completedPoints, setCompletedPoints] = useState<Set<string>>(new Set());
   const [isGeneratingImage, setIsGeneratingImage] = useState<boolean>(false);
-  const [performanceMetrics, setPerformanceMetrics] = useState<Record<string, number>>({});
+  const [performanceMetrics] = useState<Record<string, number>>({});
   const [isCreatingPresentation, setIsCreatingPresentation] = useState<boolean>(false);
   const [isOptimizingLayout, setIsOptimizingLayout] = useState<boolean>(false);
   
@@ -98,7 +113,6 @@ const App: React.FC = () => {
     showGrid: false
   });
   const workerRef = useRef<Worker | null>(null);
-  const performanceMonitorRef = useRef<Record<string, number>>({});
 
   const sessionRef = useRef<any>(null);
   const audioContextInRef = useRef<AudioContext | null>(null);
@@ -114,11 +128,11 @@ const App: React.FC = () => {
 
   // Update toolbar state when briefing data changes
   useEffect(() => {
-    if (briefingData) {
+    if (briefingData && briefingData.slides && Array.isArray(briefingData.slides)) {
       setToolbarState(prev => ({
         ...prev,
-        totalSlides: briefingData.slides.length,
-        selectedSlide: Math.min(prev.selectedSlide, Math.max(0, briefingData.slides.length - 1))
+        totalSlides: briefingData.slides.length || 0,
+        selectedSlide: Math.min(prev.selectedSlide, Math.max(0, (briefingData.slides?.length || 1) - 1))
       }));
       
       // Add to history for undo/redo functionality
@@ -176,28 +190,11 @@ const App: React.FC = () => {
     };
   }, []);
 
-  const updatePerformanceMetrics = useCallback((operation: string, duration: number) => {
-    setPerformanceMetrics(prev => ({
-      ...prev,
-      [operation]: duration
-    }));
-    
-    // Send to worker for analysis if available
-    if (workerRef.current) {
-      const performanceData = Object.entries({ ...performanceMetrics, [operation]: duration })
-        .map(([name, time]) => ({ name, duration: time as number }));
-      
-      workerRef.current.postMessage({
-        type: 'ANALYZE_PERFORMANCE',
-        data: performanceData
-      });
-    }
-  }, [performanceMetrics]);
-
   const handleGenerateImage = useCallback(async (prompt: string, sIdx: number, iIdx: number) => {
     const result = await measurePerformance('image-generation', async () => {
       try {
         setIsGeneratingImage(true);
+        const AIService = await getAIService();
         const imageUrl = await AIService.generateVisual(prompt);
         
         // Batch state update for better performance
@@ -242,7 +239,37 @@ const App: React.FC = () => {
       isStoppingRef.current = false;
 
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Erweiterte Media-Device-Berechtigungprüfung
+        console.log('🔍 Prüfe Media-Device-Unterstützung...');
+        
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error('Media-Device-API wird nicht unterstützt. Bitte verwenden Sie einen modernen Browser.');
+        }
+        
+        // Berechtigung prüfen vor dem Zugriff
+        if ('permissions' in navigator) {
+          try {
+            const permissionStatus = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+            console.log('📋 Mikrofon-Berechtigungsstatus:', permissionStatus.state);
+            
+            if (permissionStatus.state === 'denied') {
+              throw new Error('Mikrofon-Berechtigung wurde verweigert. Bitte erlauben Sie den Zugriff in den Browsereinstellungen.');
+            }
+          } catch (permissionError) {
+            console.warn('⚠️ Berechtigungsstatus konnte nicht ermittelt werden:', permissionError);
+          }
+        }
+        
+        console.log('🎤 Fordere Mikrofon-Berechtigung an...');
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: 16000,
+            channelCount: 1
+          }
+        });
         
         const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
         const outputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
@@ -254,6 +281,7 @@ const App: React.FC = () => {
         audioContextInRef.current = inputCtx;
         audioContextOutRef.current = outputCtx;
 
+        const AIService = await getAIService();
         const sessionPromise = AIService.connectLiveSession({
           onopen: () => {
             if (isStoppingRef.current) return;
@@ -265,14 +293,21 @@ const App: React.FC = () => {
             scriptProcessor.onaudioprocess = (e) => {
               if (isStoppingRef.current || inputCtx.state === 'closed') return;
               const inputData = e.inputBuffer.getChannelData(0);
-              const int16 = new Int16Array(inputData.length);
-              for (let i = 0; i < inputData.length; i++) int16[i] = inputData[i] * 32768;
-              const base64Data = encode(new Uint8Array(int16.buffer));
-              sessionPromise.then(s => {
-                if (!isStoppingRef.current && inputCtx.state !== 'closed') {
-                  try { s.sendRealtimeInput({ media: { data: base64Data, mimeType: 'audio/pcm;rate=16000' } }); } catch (err) {}
+              if (inputData) {
+                const int16 = new Int16Array(inputData.length);
+                for (let i = 0; i < inputData.length; i++) {
+                  const value = inputData[i];
+                  if (value !== undefined) {
+                    int16[i] = Math.max(-32768, Math.min(32767, Math.floor(value * 32768)));
+                  }
                 }
-              }).catch(() => {});
+                const base64Data = encode(new Uint8Array(int16.buffer));
+                sessionPromise.then((s: any) => {
+                  if (!isStoppingRef.current && inputCtx.state !== 'closed') {
+                    try { s.sendRealtimeInput({ media: { data: base64Data, mimeType: 'audio/pcm;rate=16000' } }); } catch (err) {}
+                  }
+                }).catch(() => {});
+              }
             };
 
             source.connect(scriptProcessor);
@@ -282,7 +317,7 @@ const App: React.FC = () => {
           },
           onmessage: async (msg: LiveServerMessage) => {
             if (isStoppingRef.current) return;
-            const audioData = msg.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
+            const audioData = msg.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (audioData && outputCtx.state !== 'closed') {
               nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outputCtx.currentTime);
               try {
@@ -294,24 +329,45 @@ const App: React.FC = () => {
                 nextStartTimeRef.current += buffer.duration;
               } catch (e) {}
             }
-            if (msg.toolCall) {
+            if (msg.toolCall?.functionCalls) {
               for (const fc of msg.toolCall.functionCalls) {
                 if (fc.name === 'update_briefing') {
                   setBriefingData(fc.args as any);
-                  sessionPromise.then(s => s.sendToolResponse({ functionResponses: { id: fc.id, name: fc.name, response: { result: "Board aktualisiert." } } }));
-                } else if (fc.name === 'generate_visual') {
+                  sessionPromise.then((s: any) => s.sendToolResponse({ functionResponses: { id: fc.id, name: fc.name, response: { result: "Board aktualisiert." } } }));
+                } else if (fc.name === 'generate_visual' && fc.args) {
                   handleGenerateImage(fc.args.prompt as string, fc.args.slideIndex as number, fc.args.itemIndex as number);
-                  sessionPromise.then(s => s.sendToolResponse({ functionResponses: { id: fc.id, name: fc.name, response: { result: "Visualisierung läuft." } } }));
+                  sessionPromise.then((s: any) => s.sendToolResponse({ functionResponses: { id: fc.id, name: fc.name, response: { result: "Visualisierung läuft." } } }));
                 }
               }
             }
           },
-          onerror: (e) => { if (!isStoppingRef.current) stopSession(); },
+          onerror: (_e: any) => { if (!isStoppingRef.current) stopSession(); },
           onclose: () => { if (!isStoppingRef.current) stopSession(); }
         });
         sessionRef.current = sessionPromise;
-      } catch (err) { 
+      } catch (err: any) { 
         console.error("Session Start Error:", err); 
+        
+        // Benutzerfreundliche Fehlerbehandlung
+        let errorMessage = 'Unbekannter Fehler beim Starten der Session.';
+        
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          errorMessage = 'Mikrofon-Zugriff wurde verweigert. Bitte erlauben Sie den Zugriff und versuchen Sie es erneut.';
+        } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+          errorMessage = 'Kein Mikrofon gefunden. Bitte stellen Sie sicher, dass ein Mikrofon angeschlossen ist.';
+        } else if (err.name === 'NotSupportedError') {
+          errorMessage = 'Mikrofon-Zugriff wird von diesem Browser nicht unterstützt.';
+        } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+          errorMessage = 'Mikrofon wird bereits von einer anderen Anwendung verwendet.';
+        } else if (err.name === 'OverconstrainedError' || err.name === 'ConstraintNotSatisfiedError') {
+          errorMessage = 'Mikrofon-Anforderungen konnten nicht erfüllt werden.';
+        } else if (err.message) {
+          errorMessage = err.message;
+        }
+        
+        // Benutzerfreundliche Warnung anzeigen
+        alert('Audio-Session konnte nicht gestartet werden: ' + errorMessage);
+        
         stopSession();
       }
     });
@@ -351,6 +407,26 @@ const App: React.FC = () => {
   const startSession = optimizedStartSession;
   const stopSession = optimizedStopSession;
 
+  // Preloading strategy for better UX
+  useEffect(() => {
+    const preloadCriticalComponents = () => {
+      // Preload components based on user behavior patterns
+      if (briefingData) {
+        // If we have data, preload editor and viewer
+        preloadPresentationEditor();
+        preloadPresentationViewer();
+      }
+      
+      // Preload templates when user hovers over templates button
+      const templatesButton = document.querySelector('[data-mode="templates"]');
+      if (templatesButton) {
+        templatesButton.addEventListener('mouseenter', preloadAdvancedTemplates, { once: true });
+      }
+    };
+    
+    preloadCriticalComponents();
+  }, [briefingData]);
+
   // Menu and Mode Handlers
   const handleModeChange = useCallback((mode: AppModeType) => {
     setAppMode(prev => ({ ...prev, current: mode }));
@@ -359,6 +435,24 @@ const App: React.FC = () => {
     if (mode === 'presentation') {
       setIsSidebarOpen(false);
       setIsPresenting(true);
+    }
+    
+    // Preload components when switching modes
+    switch (mode) {
+      case 'editor':
+        preloadPresentationEditor();
+        break;
+      case 'presentation':
+        preloadPresentationViewer();
+        break;
+      case 'templates':
+        preloadAdvancedTemplates();
+        break;
+      case 'export':
+        preloadExportMode();
+        break;
+      default:
+        break;
     }
     
     // Auto-save when switching modes
@@ -471,6 +565,7 @@ const App: React.FC = () => {
         maxSlides: 10
       };
       
+      const AIService = await getAIService();
       const validation = AIService.validatePresentationInput(input);
       if (!validation.isValid) {
         alert(`Validierungsfehler: ${validation.errors.join(', ')}`);
@@ -494,10 +589,11 @@ const App: React.FC = () => {
     try {
       setIsOptimizingLayout(true);
       
+      const AIService = await getAIService();
       const optimizedLayout = await AIService.optimizeLayout(briefingData.slides);
       
       // Reorganisiere Folien basierend auf optimierter Reihenfolge
-      const reorderedSlides = optimizedLayout.slideOrder.map(index => briefingData.slides[index]);
+      const reorderedSlides = optimizedLayout.slideOrder.map((index: number) => briefingData.slides[index]);
       setBriefingData({ ...briefingData, slides: reorderedSlides });
       
     } catch (error) {
@@ -514,6 +610,7 @@ const App: React.FC = () => {
     try {
       setIsGeneratingImage(true);
       
+      const AIService = await getAIService();
       const enhancedSlides = await AIService.addImagesToSlides(briefingData.slides);
       setBriefingData({ ...briefingData, slides: enhancedSlides });
       
@@ -525,7 +622,8 @@ const App: React.FC = () => {
     }
   }, [briefingData]);
 
-  const handleToolbarAction = useCallback({
+  // Separate toolbar action handlers to avoid type issues
+  const handleToolbarAction = {
     onUndo: () => handleEditAction('undo'),
     onRedo: () => handleEditAction('redo'),
     onSave: () => handleFileAction('save'),
@@ -548,11 +646,16 @@ const App: React.FC = () => {
     onCreatePresentation: handleCreatePresentation,
     onOptimizeLayout: handleOptimizeLayout,
     onAddImages: handleAddImages
-  }, [handleEditAction, handleFileAction, handleModeChange, handleCreatePresentation, handleOptimizeLayout, handleAddImages]);
+  };
 
   return (
     <div className="h-screen flex bg-[#020617] text-slate-200 overflow-hidden font-sans selection:bg-indigo-500/40 relative">
-      {isPresenting && briefingData && <PresentationViewer data={briefingData} onClose={() => setIsPresenting(false)} />}
+      {isPresenting && briefingData && (
+        <LazyPresentationViewerWrapper 
+          data={briefingData} 
+          onClose={() => setIsPresenting(false)} 
+        />
+      )}
       
       {/* Performance Monitor Panel - Development Only */}
       {process.env.NODE_ENV === 'development' && (
@@ -714,42 +817,38 @@ const App: React.FC = () => {
           </div>
         )}
         
-        {/* Mode-specific content */}
+        {/* Mode-specific content with Lazy Loading */}
         {appMode.current === 'editor' && briefingData ? (
-          <PresentationEditor
+          <LazyPresentationEditorWrapper
             data={briefingData}
             onDataChange={setBriefingData}
             onModeChange={handleModeChange}
             disabled={state.isActive}
           />
         ) : appMode.current === 'export' && briefingData ? (
-          <ExportMode
+          <LazyExportModeWrapper
             data={briefingData}
-            onExport={(format, options) => {
-              // Export functionality will be handled by ExportMode component
-              console.log('Exporting to', format, 'with options:', options);
-            }}
-            onModeChange={handleModeChange}
+            onClose={() => handleModeChange('voice')}
           />
         ) : appMode.current === 'templates' ? (
-          <AdvancedTemplates
-            onSelectTemplate={(template) => {
+          <LazyAdvancedTemplatesWrapper
+            onTemplateSelect={(template: any) => {
               if (template) {
                 setBriefingData(template);
                 handleModeChange('editor');
               }
             }}
-            onCreateCustom={(customTemplate) => {
+            onCreateCustom={(customTemplate: any) => {
               if (customTemplate) {
                 setBriefingData(customTemplate);
                 handleModeChange('editor');
               }
             }}
-            onModeChange={handleModeChange}
+            onClose={() => handleModeChange('voice')}
           />
         ) : appMode.current === 'voice' || !briefingData ? (
           <div className="h-full overflow-hidden">
-            <LiveBriefingPanel 
+            <LazyLiveBriefingPanelWrapper 
               data={briefingData} 
               isLoading={false} 
               completedPoints={completedPoints}
@@ -769,8 +868,8 @@ const App: React.FC = () => {
 
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes voice-bounce {
-          0%, 100% { height: 8px; transform: translateY(0); }
-          50% { height: 24px; transform: translateY(-4px); }
+          0%, 100% { transform: scaleY(1) translateY(0); }
+          50% { transform: scaleY(3) translateY(-4px); }
         }
         .animate-voice-bounce { animation: voice-bounce 0.8s ease-in-out infinite; }
         
@@ -818,16 +917,32 @@ const App: React.FC = () => {
           contain: layout style paint;
         }
         
-        /* Optimize image rendering */
+        /* Cross-browser compatible image rendering */
         img {
+          image-rendering: -ms-crisp-edges;
+          image-rendering: -moz-crisp-edges;
+          image-rendering: -o-crisp-edges;
           image-rendering: -webkit-optimize-contrast;
           image-rendering: crisp-edges;
         }
         
-        /* Reduce repaints */
+        /* Cross-browser compatible backdrop-filter */
         .backdrop-blur-xl {
-          backdrop-filter: blur(24px);
           -webkit-backdrop-filter: blur(24px);
+          backdrop-filter: blur(24px);
+        }
+        
+        /* Cross-browser compatible text size adjustment */
+        html {
+          -ms-text-size-adjust: 100%;
+          -webkit-text-size-adjust: 100%;
+          text-size-adjust: 100%;
+        }
+        
+        /* Cross-browser compatible scrollbar styling */
+        * {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(99, 102, 241, 0.3) transparent;
         }
         
         /* Optimize focus states */

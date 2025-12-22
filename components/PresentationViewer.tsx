@@ -1,5 +1,5 @@
-
-import React, { useState, useEffect } from 'react';
+import * as React from 'react';
+import { useState, useEffect } from 'react';
 import { PresentationData, Slide } from '../types';
 import { SparklesIcon } from './Icons';
 
@@ -22,6 +22,11 @@ const PresentationViewer: React.FC<PresentationViewerProps> = ({ data, onClose }
   }, [data.slides.length, onClose]);
 
   const renderSlide = () => {
+    // Check if data and slides exist
+    if (!data || !data.slides || data.slides.length === 0) {
+      return null;
+    }
+
     // Cinematic Title Slide
     if (index === 0) {
       return (
@@ -42,9 +47,9 @@ const PresentationViewer: React.FC<PresentationViewerProps> = ({ data, onClose }
     }
 
     const slide = data.slides[index - 1];
-    if (!slide) return null;
+    if (!slide || !slide.items) return null;
 
-    const featuredImage = slide.items.find(i => i.imageUrl)?.imageUrl;
+    const featuredImage = slide.items.find(i => i && i.imageUrl)?.imageUrl;
 
     return (
       <div className="h-full flex flex-col animate-in fade-in slide-in-from-right-12 duration-700">
@@ -106,7 +111,7 @@ const PresentationViewer: React.FC<PresentationViewerProps> = ({ data, onClose }
       <div className="absolute top-0 left-0 w-full h-2 bg-white/5">
         <div 
           className="h-full bg-indigo-600 transition-all duration-1000 ease-out shadow-[0_0_25px_rgba(79,70,229,0.6)]" 
-          style={{ width: `${(index / data.slides.length) * 100}%` }} 
+          style={{ width: `${data.slides.length > 0 ? (index / data.slides.length) * 100 : 0}%` }} 
         />
       </div>
 
@@ -135,7 +140,7 @@ const PresentationViewer: React.FC<PresentationViewerProps> = ({ data, onClose }
            </button>
            <button 
              onClick={() => setIndex(i => Math.min(data.slides.length, i + 1))}
-             disabled={index === data.slides.length}
+             disabled={index >= data.slides.length}
              className="p-10 rounded-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-5 transition-all text-white shadow-3xl shadow-indigo-600/40 border border-indigo-400/20 active:scale-90"
            >
              <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path d="M9 5l7 7-7 7" /></svg>

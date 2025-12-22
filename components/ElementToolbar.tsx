@@ -1,4 +1,4 @@
-import React from 'react';
+import * as React from 'react';
 import { SlideElement } from './PresentationEditor';
 import { 
   TextIcon, 
@@ -32,12 +32,12 @@ const ElementToolbar: React.FC<ElementToolbarProps> = ({
   onElementAdd,
   onElementTypeSelect,
   selectedElement
-}) => {
+}: ElementToolbarProps) => {
   
-  const createElement = (type: string) => {
+  const createElement = (type: 'text' | 'image' | 'shape' | 'chart' | 'table' | 'video') => {
     const element: SlideElement = {
       id: `${type}_${Date.now()}`,
-      type: type as any,
+      type,
       position: { x: 100, y: 100 },
       size: { width: 200, height: 100 },
       content: getDefaultContent(type),
@@ -48,7 +48,7 @@ const ElementToolbar: React.FC<ElementToolbarProps> = ({
     onElementTypeSelect(type);
   };
 
-  const getDefaultContent = (type: string) => {
+  const getDefaultContent = (type: 'text' | 'image' | 'shape' | 'chart' | 'table' | 'video') => {
     switch (type) {
       case 'text':
         return { text: 'Neuer Text', fontSize: 16 };
@@ -67,7 +67,7 @@ const ElementToolbar: React.FC<ElementToolbarProps> = ({
     }
   };
 
-  const getDefaultStyle = (type: string) => {
+  const getDefaultStyle = (type: 'text' | 'image' | 'shape' | 'chart' | 'table' | 'video') => {
     const baseStyle = {
       fontSize: 16,
       fontFamily: 'Inter, sans-serif',
@@ -185,20 +185,20 @@ const ElementToolbar: React.FC<ElementToolbarProps> = ({
                 return (
                   <button
                     key={tool.id}
-                    onClick={() => createElement(tool.id)}
+                    onClick={() => createElement(tool.id as 'text' | 'image' | 'shape' | 'chart' | 'table' | 'video')}
                     className="
                       w-12 h-12 rounded-lg border border-white/10 hover:border-white/20 
                       hover:bg-white/5 transition-all duration-200 flex flex-col items-center 
                       justify-center gap-1 group relative
                     "
-                    title={`${tool.label}${tool.shortcut ? ` (${tool.shortcut})` : ''}`}
+                    title={`${tool.label}${'shortcut' in tool && tool.shortcut ? ` (${tool.shortcut})` : ''}`}
                   >
                     <Icon className="w-5 h-5 text-slate-400 group-hover:text-white transition-colors" />
                     
-                    {tool.shortcut && (
+                    {'shortcut' in tool && tool.shortcut && (
                       <div className="absolute -bottom-6 left-1/2 transform -translate-x-1/2">
                         <span className="text-[10px] font-mono text-slate-600 bg-slate-800 px-1 py-0.5 rounded">
-                          {tool.shortcut}
+                          {('shortcut' in tool ? tool.shortcut : '')}
                         </span>
                       </div>
                     )}

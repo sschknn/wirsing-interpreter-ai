@@ -55,7 +55,7 @@ class ExportService {
   /**
    * Exportiert zu PowerPoint
    */
-  static async exportToPowerPoint(data: PresentationData, options: ExportOptions = { format: 'pptx' }): Promise<ExportResult> {
+  static async exportToPowerPoint(data: PresentationData, _options: ExportOptions = { format: 'pptx' }): Promise<ExportResult> {
     try {
       // PowerPoint-Export mit PptxGenJS (vereinfacht)
       const pptxData = this.convertToPowerPointFormat(data);
@@ -250,7 +250,7 @@ class ExportService {
     </style>
 </head>
 <body>
-    ${data.slides.map((slide, index) => `
+    ${data.slides.map((slide) => `
         <div class="slide">
             <h1 class="slide-title">${slide.title}</h1>
             <div class="slide-content">
@@ -362,7 +362,7 @@ class ExportService {
   /**
    * Öffnet Datei in neuem Tab
    */
-  static openInNewTab(data: string, filename: string): void {
+  static openInNewTab(data: string, _filename: string): void {
     const blob = new Blob([data], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     window.open(url, '_blank');

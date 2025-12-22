@@ -1,4 +1,4 @@
-import { PresentationData, Slide } from '../types';
+import { PresentationData } from '../types';
 
 export interface Template {
   id: string;

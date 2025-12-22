@@ -1,5 +1,6 @@
-import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { PresentationData, Slide, SlideItem, AppModeType, ToolbarState } from '../types';
+import * as React from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { PresentationData, Slide, AppModeType, Priority } from '../types';
 import { AIService, SlideContent } from '../services/aiService';
 import SlideNavigation from './SlideNavigation';
 import ElementToolbar from './ElementToolbar';
@@ -14,12 +15,9 @@ import {
   GridIcon, 
   UndoIcon, 
   RedoIcon, 
-  SaveIcon,
   PlayIcon,
   SparklesIcon,
-  EyeIcon,
-  CopyIcon,
-  TrashIcon
+  EyeIcon
 } from './Icons';
 
 // ============================================================================
@@ -83,7 +81,7 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
   onDataChange,
   onModeChange,
   disabled = false
-}) => {
+}: PresentationEditorProps) => {
   const canvasRef = useRef<HTMLDivElement>(null);
   
   const [editorState, setEditorState] = useState<SlideEditorState>({
@@ -103,10 +101,13 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
   // HILFSFUNKTIONEN
   // ============================================================================
 
-  const currentSlide = useMemo(() => 
-    editorState.presentationData.slides[editorState.currentSlide], 
-    [editorState.presentationData.slides, editorState.currentSlide]
-  );
+  const currentSlide = useMemo(() => {
+    // Null-Safety-Check für slides
+    if (!editorState.presentationData || !editorState.presentationData.slides) {
+      return null;
+    }
+    return editorState.presentationData.slides[editorState.currentSlide];
+  }, [editorState.presentationData, editorState.currentSlide]);
 
   const totalSlides = editorState.presentationData.slides.length;
 
@@ -211,6 +212,8 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
 
   const duplicateSlide = useCallback((slideIndex: number) => {
     const slideToDuplicate = editorState.presentationData.slides[slideIndex];
+    if (!slideToDuplicate) return;
+    
     const newSlide: Slide = {
       ...slideToDuplicate,
       title: `${slideToDuplicate.title} (Kopie)`
@@ -294,7 +297,7 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
         items: slideContent.content.map(content => ({
           text: content,
           category: 'content',
-          priority: 'mittel' as const
+          priority: Priority.MEDIUM
         }))
       };
 
@@ -338,7 +341,7 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
         ...editorState.presentationData,
         slides: editorState.presentationData.slides.map((slide, index) =>
           index === editorState.currentSlide ? enhancedSlide : slide
-        )
+        ).filter(slide => slide !== undefined) as Slide[]
       };
 
       const change: SlideChange = {
@@ -474,7 +477,9 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
             onSlideMove={(fromIndex, toIndex) => {
               const newSlides = [...editorState.presentationData.slides];
               const [movedSlide] = newSlides.splice(fromIndex, 1);
-              newSlides.splice(toIndex, 0, movedSlide);
+              if (movedSlide) {
+                newSlides.splice(toIndex, 0, movedSlide);
+              }
               
               const newData = { ...editorState.presentationData, slides: newSlides };
               setEditorState(prev => ({ ...prev, presentationData: newData }));
@@ -502,12 +507,15 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
             <div className="flex items-center gap-2">
               {/* Navigation */}
               <button
+                type="button"
                 onClick={() => setEditorState(prev => ({ 
                   ...prev, 
                   currentSlide: Math.max(0, prev.currentSlide - 1) 
                 }))}
                 disabled={editorState.currentSlide === 0}
                 className="p-2 text-slate-400 hover:text-white transition-colors disabled:opacity-50"
+                title="Vorherige Folie"
+                aria-label="Zur vorherigen Folie navigieren"
               >
                 <ChevronLeftIcon className="w-5 h-5" />
               </button>
@@ -517,12 +525,15 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
               </span>
               
               <button
+                type="button"
                 onClick={() => setEditorState(prev => ({ 
                   ...prev, 
                   currentSlide: Math.min(totalSlides - 1, prev.currentSlide + 1) 
                 }))}
                 disabled={editorState.currentSlide === totalSlides - 1}
                 className="p-2 text-slate-400 hover:text-white transition-colors disabled:opacity-50"
+                title="Nächste Folie"
+                aria-label="Zur nächsten Folie navigieren"
               >
                 <ChevronRightIcon className="w-5 h-5" />
               </button>
@@ -530,8 +541,11 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
               {/* Zoom Controls */}
               <div className="flex items-center gap-1 ml-4">
                 <button
+                  type="button"
                   onClick={() => handleZoom(editorState.zoom - 25)}
                   className="p-2 text-slate-400 hover:text-white transition-colors"
+                  title="Herauszoomen"
+                  aria-label="Herauszoomen"
                 >
                   <ZoomOutIcon className="w-4 h-4" />
                 </button>
@@ -539,8 +553,11 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
                   {editorState.zoom}%
                 </span>
                 <button
+                  type="button"
                   onClick={() => handleZoom(editorState.zoom + 25)}
                   className="p-2 text-slate-400 hover:text-white transition-colors"
+                  title="Hineinzoomen"
+                  aria-label="Hineinzoomen"
                 >
                   <ZoomInIcon className="w-4 h-4" />
                 </button>
@@ -548,12 +565,15 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
 
               {/* Grid Toggle */}
               <button
+                type="button"
                 onClick={toggleGrid}
                 className={`p-2 transition-colors ${
                   editorState.gridEnabled 
                     ? 'text-indigo-400 bg-indigo-500/20' 
                     : 'text-slate-400 hover:text-white'
                 }`}
+                title={editorState.gridEnabled ? 'Raster ausblenden' : 'Raster anzeigen'}
+                aria-label={editorState.gridEnabled ? 'Raster ausblenden' : 'Raster anzeigen'}
               >
                 <GridIcon className="w-4 h-4" />
               </button>
@@ -580,17 +600,23 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
 
               {/* Undo/Redo */}
               <button
+                type="button"
                 onClick={undo}
                 disabled={editorState.historyIndex <= 0}
                 className="p-2 text-slate-400 hover:text-white transition-colors disabled:opacity-50"
+                title="Rückgängig (Ctrl+Z)"
+                aria-label="Letzte Aktion rückgängig machen"
               >
                 <UndoIcon className="w-4 h-4" />
               </button>
 
               <button
+                type="button"
                 onClick={redo}
                 disabled={editorState.historyIndex >= editorState.history.length - 1}
                 className="p-2 text-slate-400 hover:text-white transition-colors disabled:opacity-50"
+                title="Wiederholen (Ctrl+Y)"
+                aria-label="Letzte rückgängig gemachte Aktion wiederholen"
               >
                 <RedoIcon className="w-4 h-4" />
               </button>
@@ -694,9 +720,9 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
           <div className="w-80 bg-slate-950 border-l border-white/5">
             <PropertiesPanel
               selectedElement={editorState.selectedElement}
-              slide={currentSlide}
+              slide={currentSlide || null}
               onElementUpdate={updateElement}
-              onSlideUpdate={(updates) => {
+              onSlideUpdate={(updates: Partial<Slide>) => {
                 const newData = {
                   ...editorState.presentationData,
                   slides: editorState.presentationData.slides.map((slide, index) =>
@@ -714,7 +740,7 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
       {/* Vorlagen-Modal */}
       {editorState.showTemplates && (
         <SlideTemplates
-          onTemplateSelect={(templateType, topic) => {
+          onTemplateSelect={(templateType: string, topic: string) => {
             generateContentWithAI(topic, templateType);
           }}
           onClose={() => setEditorState(prev => ({ ...prev, showTemplates: false }))}

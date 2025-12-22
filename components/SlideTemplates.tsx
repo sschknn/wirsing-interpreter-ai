@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import * as React from 'react';
+import { useState } from 'react';
 import { 
   XIcon,
   SparklesIcon,
@@ -340,7 +341,8 @@ const SlideTemplates: React.FC<SlideTemplatesProps> = ({
               <div className="space-y-2">
                 <button
                   onClick={() => {
-                    setSelectedTemplate(templates[0]);
+                    const template = templates[0];
+                    if (template) setSelectedTemplate(template);
                     setTopic('Strategische Ziele für das kommende Jahr');
                   }}
                   className="w-full text-left p-2 text-sm text-slate-400 hover:text-white hover:bg-white/5 rounded transition-colors"
@@ -349,7 +351,8 @@ const SlideTemplates: React.FC<SlideTemplatesProps> = ({
                 </button>
                 <button
                   onClick={() => {
-                    setSelectedTemplate(templates[1]);
+                    const template = templates[1];
+                    if (template) setSelectedTemplate(template);
                     setTopic('Projektplanung und Aufgaben für Q1');
                   }}
                   className="w-full text-left p-2 text-sm text-slate-400 hover:text-white hover:bg-white/5 rounded transition-colors"
@@ -358,7 +361,8 @@ const SlideTemplates: React.FC<SlideTemplatesProps> = ({
                 </button>
                 <button
                   onClick={() => {
-                    setSelectedTemplate(templates[2]);
+                    const template = templates[2];
+                    if (template) setSelectedTemplate(template);
                     setTopic('Innovative Ideen für Produktentwicklung');
                   }}
                   className="w-full text-left p-2 text-sm text-slate-400 hover:text-white hover:bg-white/5 rounded transition-colors"

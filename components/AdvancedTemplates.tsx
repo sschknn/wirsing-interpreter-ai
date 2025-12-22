@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import * as React from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { PresentationData } from '../types';
 import TemplateService, { Template, TemplateCategory, TemplateFilter } from '../services/templateService';
 import { 
@@ -29,7 +30,7 @@ const AdvancedTemplates: React.FC<AdvancedTemplatesProps> = ({
   onTemplateSelect,
   onCreateCustom,
   onClose
-}) => {
+}: AdvancedTemplatesProps) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
@@ -51,12 +52,10 @@ const AdvancedTemplates: React.FC<AdvancedTemplatesProps> = ({
     }
     
     // Filter by search query
-    if (searchQuery.trim()) {
-      filtered = TemplateService.searchTemplates(searchQuery);
-    }
+    // Search is already applied in the filter options above
     
     // Apply additional filters
-    filtered = TemplateService.getTemplates(filterOptions);
+    filtered = TemplateService.getTemplates({ ...filterOptions, search: searchQuery });
     
     // Sort templates
     filtered.sort((a, b) => {
@@ -200,7 +199,7 @@ const AdvancedTemplates: React.FC<AdvancedTemplatesProps> = ({
           
           <select
             value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as any)}
+            onChange={(e) => setSortBy(e.target.value as 'rating' | 'usage' | 'date')}
             className="px-3 py-2 bg-slate-800 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
             <option value="rating">Nach Bewertung</option>
@@ -305,7 +304,7 @@ const AdvancedTemplates: React.FC<AdvancedTemplatesProps> = ({
                                 className: `w-6 h-6 text-${categoryColor}-400`
                               })}
                             </div>
-                            <p className="text-xs">{template.slides.length} Folien</p>
+                            <p className="text-xs">{template.data.slides.length} Folien</p>
                           </div>
                         </div>
                         
@@ -439,7 +438,7 @@ const AdvancedTemplates: React.FC<AdvancedTemplatesProps> = ({
                       className: `w-8 h-8 text-${getCategoryColor(selectedTemplate.category)}-400`
                     })}
                   </div>
-                  <p className="text-sm">{selectedTemplate.slides.length} Folien</p>
+                  <p className="text-sm">{selectedTemplate.data.slides.length} Folien</p>
                 </div>
               </div>
               

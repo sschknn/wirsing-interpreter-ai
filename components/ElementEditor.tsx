@@ -1,5 +1,7 @@
-import React, { useState, useRef } from 'react';
+import * as React from 'react';
+import { useState, useRef } from 'react';
 import { SlideElement } from './PresentationEditor';
+import '../styles/element-editor.css';
 
 // ============================================================================
 // ELEMENT EDITOR COMPONENT
@@ -124,13 +126,11 @@ const ElementEditor: React.FC<ElementEditorProps> = ({
                     handleTextEdit();
                   }
                 }}
-                className="w-full h-full bg-transparent border-none outline-none resize-none"
-                style={{
-                  fontSize: element.style?.fontSize || 16,
-                  fontFamily: element.style?.fontFamily || 'Inter, sans-serif',
-                  color: element.style?.color || '#000000'
-                }}
+                className="element-editor-textarea"
+                title="Text-Editor für Element-Inhalt"
+                placeholder="Geben Sie hier Ihren Text ein..."
                 autoFocus
+                aria-label="Text-Editor für Element-Inhalt"
               />
             ) : (
               <div className="cursor-text w-full">
@@ -157,7 +157,7 @@ const ElementEditor: React.FC<ElementEditorProps> = ({
           >
             <img
               src={element.content?.src || 'https://via.placeholder.com/200x150?text=Bild'}
-              alt={element.content?.alt || 'Bild'}
+              alt={element.content?.alt || `Bearbeitbares Element: ${element.type} mit ID ${element.id}`}
               className="w-full h-full object-cover rounded"
               style={{ borderRadius: element.style?.borderRadius || 0 }}
             />
@@ -279,6 +279,8 @@ const ElementEditor: React.FC<ElementEditorProps> = ({
                   value={element.position.x}
                   onChange={(e) => handlePositionChange('x', Number(e.target.value))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  title="X-Position des Elements"
+                  placeholder="X-Position"
                 />
               </div>
               <div>
@@ -290,6 +292,8 @@ const ElementEditor: React.FC<ElementEditorProps> = ({
                   value={element.position.y}
                   onChange={(e) => handlePositionChange('y', Number(e.target.value))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  title="Y-Position des Elements"
+                  placeholder="Y-Position"
                 />
               </div>
             </div>
@@ -308,6 +312,8 @@ const ElementEditor: React.FC<ElementEditorProps> = ({
                   value={element.size.width}
                   onChange={(e) => handleSizeChange('width', Number(e.target.value))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  title="Breite des Elements in Pixeln"
+                  placeholder="Breite"
                 />
               </div>
               <div>
@@ -319,6 +325,8 @@ const ElementEditor: React.FC<ElementEditorProps> = ({
                   value={element.size.height}
                   onChange={(e) => handleSizeChange('height', Number(e.target.value))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  title="Höhe des Elements in Pixeln"
+                  placeholder="Höhe"
                 />
               </div>
             </div>
@@ -340,6 +348,7 @@ const ElementEditor: React.FC<ElementEditorProps> = ({
                   value={element.style?.rotation || 0}
                   onChange={(e) => handleStyleChange('rotation', Number(e.target.value))}
                   className="w-full"
+                  title="Rotation des Elements in Grad"
                 />
               </div>
 
@@ -355,6 +364,7 @@ const ElementEditor: React.FC<ElementEditorProps> = ({
                   value={(element.style?.opacity || 1) * 100}
                   onChange={(e) => handleStyleChange('opacity', Number(e.target.value) / 100)}
                   className="w-full"
+                  title="Deckkraft des Elements"
                 />
               </div>
 
@@ -370,12 +380,15 @@ const ElementEditor: React.FC<ElementEditorProps> = ({
                       value={element.style?.backgroundColor || '#ffffff'}
                       onChange={(e) => handleStyleChange('backgroundColor', e.target.value)}
                       className="w-8 h-8 rounded border border-gray-300"
+                      title="Hintergrundfarbe auswählen"
                     />
                     <input
                       type="text"
                       value={element.style?.backgroundColor || '#ffffff'}
                       onChange={(e) => handleStyleChange('backgroundColor', e.target.value)}
                       className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      title="Hintergrundfarbe als Hex-Code eingeben"
+                      placeholder="#ffffff"
                     />
                   </div>
                 </div>
@@ -393,12 +406,15 @@ const ElementEditor: React.FC<ElementEditorProps> = ({
                       value={element.style?.color || '#000000'}
                       onChange={(e) => handleStyleChange('color', e.target.value)}
                       className="w-8 h-8 rounded border border-gray-300"
+                      title="Textfarbe auswählen"
                     />
                     <input
                       type="text"
                       value={element.style?.color || '#000000'}
                       onChange={(e) => handleStyleChange('color', e.target.value)}
                       className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      title="Textfarbe als Hex-Code eingeben"
+                      placeholder="#000000"
                     />
                   </div>
                 </div>
@@ -417,6 +433,8 @@ const ElementEditor: React.FC<ElementEditorProps> = ({
                     value={element.style?.fontSize || 16}
                     onChange={(e) => handleStyleChange('fontSize', Number(e.target.value))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    title="Schriftgröße in Pixeln"
+                    placeholder="16"
                   />
                 </div>
               )}
@@ -441,6 +459,7 @@ const ElementEditor: React.FC<ElementEditorProps> = ({
                     })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                     placeholder="https://example.com/image.jpg"
+                    title="URL des Bildes eingeben"
                   />
                 </div>
                 <div>
@@ -456,6 +475,7 @@ const ElementEditor: React.FC<ElementEditorProps> = ({
                     })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                     placeholder="Beschreibung des Bildes"
+                    title="Alt-Text für das Bild (Barrierefreiheit)"
                   />
                 </div>
               </div>
@@ -477,6 +497,7 @@ const ElementEditor: React.FC<ElementEditorProps> = ({
                       content: { ...element.content, shape: e.target.value }
                     })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    title="Form-Typ auswählen"
                   >
                     <option value="rectangle">Rechteck</option>
                     <option value="circle">Kreis</option>

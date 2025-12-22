@@ -67,7 +67,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
       `}
       title={`${label}${shortcut ? ` (${shortcut})` : ''}`}
     >
-      <icon className="w-4 h-4" />
+      {React.createElement(icon, { className: "w-4 h-4" })}
       <span>{label}</span>
       {shortcut && <span className="text-xs opacity-70 ml-auto">{shortcut}</span>}
     </button>

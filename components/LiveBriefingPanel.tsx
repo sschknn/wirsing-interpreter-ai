@@ -68,7 +68,7 @@ const LiveBriefingPanel: React.FC<LiveBriefingPanelProps> = ({ data, completedPo
                         
                         {item.imageUrl && (
                           <div className="mt-6 sm:mt-10 rounded-3xl sm:rounded-[48px] overflow-hidden border border-white/10 aspect-video bg-white/5 relative group/img shadow-2xl shadow-black/60">
-                             <img src={item.imageUrl} className="w-full h-full object-cover transition-transform duration-[4s] group-hover/img:scale-110" alt="" loading="lazy" />
+                             <img src={item.imageUrl} className="w-full h-full object-cover transition-transform duration-[4s] group-hover/img:scale-110" alt={`Visualisiertes Konzept für ${item.text || 'Präsentationsinhalt'}`} loading="lazy" />
                              <div className="absolute inset-0 bg-gradient-to-t from-[#020617] via-transparent to-transparent opacity-0 group-hover/img:opacity-100 transition-opacity flex items-end p-6 sm:p-10">
                                 <div className="flex items-center gap-3 sm:gap-4">
                                    <div className="w-2 h-2 rounded-full bg-indigo-500 animate-ping" />
@@ -101,7 +101,7 @@ const LiveBriefingPanel: React.FC<LiveBriefingPanelProps> = ({ data, completedPo
                      <div className="grid grid-cols-2 lg:grid-cols-1 gap-4 sm:gap-8">
                         {slide.items.filter(i => i.imageUrl).map((item, idx) => (
                           <div key={idx} className="rounded-3xl sm:rounded-[56px] overflow-hidden border border-white/10 aspect-square shadow-xl">
-                             <img src={item.imageUrl} className="w-full h-full object-cover" alt="" loading="lazy" />
+                             <img src={item.imageUrl} className="w-full h-full object-cover" alt={`Gallery-Bild: ${item.text || 'Präsentationsvisualisierung'}`} loading="lazy" />
                           </div>
                         ))}
                      </div>

@@ -1,0 +1,50 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# ============================================================================
+# PRE-COMMIT HOOKS FÜR AUTOMATISIERTES TESTING
+# ============================================================================
+
+echo "🧪 Running Pre-commit Tests..."
+
+# Type Checking
+echo "🔍 Type Checking..."
+npm run type-check
+if [ $? -ne 0 ]; then
+    echo "❌ Type checking failed"
+    exit 1
+fi
+
+# Linting
+echo "🔍 Running ESLint..."
+npm run lint
+if [ $? -ne 0 ]; then
+    echo "❌ Linting failed"
+    exit 1
+fi
+
+# Quick Unit Tests (fast subset)
+echo "🧪 Running Quick Unit Tests..."
+npm run test -- --run --reporter=verbose --coverage=false
+if [ $? -ne 0 ]; then
+    echo "❌ Unit tests failed"
+    exit 1
+fi
+
+# Bundle Size Check
+echo "📦 Checking Bundle Size..."
+npm run build
+if [ $? -ne 0 ]; then
+    echo "❌ Build failed"
+    exit 1
+fi
+
+# Check bundle size (should be under 5MB)
+BUNDLE_SIZE=$(du -sb dist | cut -f1)
+if [ $BUNDLE_SIZE -gt 5242880 ]; then # 5MB limit
+    echo "❌ Bundle size ($BUNDLE_SIZE bytes) exceeds 5MB limit"
+    exit 1
+fi
+
+echo "✅ All pre-commit checks passed!"
+echo "🚀 Ready to commit!"

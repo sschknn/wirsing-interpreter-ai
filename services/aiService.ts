@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, LiveServerMessage, Modality, FunctionDeclaration } from "@google/genai";
-import { ParsedData, PresentationData, Slide, SlideItem, Task, Insight } from "../types";
+import { ParsedData, PresentationData, Slide, SlideItem } from "../types";
 
 // ============================================================================
 // ERWEITERTE TYPES FÜR PRÄSENTATIONS-KI
@@ -173,11 +173,14 @@ export class AIService {
         }
       });
 
-      const part = response.candidates?.[0]?.content?.parts.find(p => p.inlineData);
-      if (part?.inlineData) {
-        const imageUrl = `data:image/png;base64,${part.inlineData.data}`;
-        this.setCachedResult(cacheKey, imageUrl);
-        return imageUrl;
+      const parts = response.candidates?.[0]?.content?.parts;
+      if (parts) {
+        const part = parts.find(p => p.inlineData);
+        if (part?.inlineData?.data) {
+          const imageUrl = `data:image/png;base64,${part.inlineData.data}`;
+          this.setCachedResult(cacheKey, imageUrl);
+          return imageUrl;
+        }
       }
       
       throw new Error('Kein Bild in der KI-Antwort gefunden');
@@ -513,7 +516,7 @@ export class AIService {
         // Füge Bilder zu Items hinzu, die noch keine haben
         for (let i = 0; i < enhancedSlide.items.length; i++) {
           const item = enhancedSlide.items[i];
-          if (!item.imageUrl && item.text) {
+          if (item && !item.imageUrl && item.text) {
             try {
               const imageUrl = await this.generateVisual(item.text);
               enhancedSlide.items[i] = { ...item, imageUrl };

@@ -1,0 +1,61 @@
+/**
+ * Performance Dashboard Styles
+ * Ersetzt inline CSS-Styles für bessere Code-Qualität
+ */
+
+/* Chart Bar Height Utilities */
+.chart-bar-height-0 { height: 0%; }
+.chart-bar-height-5 { height: 5%; }
+.chart-bar-height-10 { height: 10%; }
+.chart-bar-height-15 { height: 15%; }
+.chart-bar-height-20 { height: 20%; }
+.chart-bar-height-25 { height: 25%; }
+.chart-bar-height-30 { height: 30%; }
+.chart-bar-height-35 { height: 35%; }
+.chart-bar-height-40 { height: 40%; }
+.chart-bar-height-45 { height: 45%; }
+.chart-bar-height-50 { height: 50%; }
+.chart-bar-height-55 { height: 55%; }
+.chart-bar-height-60 { height: 60%; }
+.chart-bar-height-65 { height: 65%; }
+.chart-bar-height-70 { height: 70%; }
+.chart-bar-height-75 { height: 75%; }
+.chart-bar-height-80 { height: 80%; }
+.chart-bar-height-85 { height: 85%; }
+.chart-bar-height-90 { height: 90%; }
+.chart-bar-height-95 { height: 95%; }
+.chart-bar-height-100 { height: 100%; }
+
+/* Chart Bar Base Styles */
+.chart-bar-base {
+  @apply w-full rounded-t transition-all duration-300 ease-in-out;
+}
+
+/* Performance Rating Colors */
+.chart-bar-excellent {
+  @apply bg-green-400 hover:bg-green-500;
+}
+
+.chart-bar-good {
+  @apply bg-blue-400 hover:bg-blue-500;
+}
+
+.chart-bar-needs-improvement {
+  @apply bg-yellow-400 hover:bg-yellow-500;
+}
+
+.chart-bar-poor {
+  @apply bg-red-400 hover:bg-red-500;
+}
+
+/* Animation for smooth transitions */
+.chart-bar-container {
+  @apply flex-1 flex flex-col items-center;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .chart-bar-base {
+    @apply rounded-sm;
+  }
+}

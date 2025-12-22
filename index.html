@@ -1,26 +1,41 @@
-
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de" dir="ltr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Cross-browser compatible theme color -->
     <meta name="theme-color" content="#020617">
+    <meta name="msapplication-navbutton-color" content="#020617">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="AI Secretary • Live Executive Briefing - Intelligenter Assistent für professionelle Präsentationen und Executive Briefings">
+    <meta name="keywords" content="AI, Secretary, Executive, Briefing, Presentation, KI, Präsentation, Assistent">
+    <meta name="author" content="AI Secretary Team">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="">
+    
+    <!-- Permissions Policy - Mikrofon erlauben -->
+    <meta http-equiv="Permissions-Policy" content="microphone=(self), camera=(), geolocation=()">
     <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="favicon.svg">
-    <link rel="icon" href="favicon.svg">
-    <link rel="shortcut icon" href="/favicon.svg">
+    <link rel="shortcut icon" href="favicon.ico">
     <title>AI Secretary • Live Executive Briefing</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
+
 <style>
   body {
     font-family: 'Inter', sans-serif;
     overscroll-behavior-y: contain; /* Verhindert Pull-to-refresh auf Android */
+    -webkit-text-size-adjust: 100%;
+    -ms-text-size-adjust: 100%;
+    /* Standard text-size-adjust für moderne Browser - nach Prefixes */
+    text-size-adjust: 100%;
   }
   .font-mono { font-family: 'JetBrains Mono', monospace; }
   .custom-scrollbar::-webkit-scrollbar { width: 4px; }
@@ -30,6 +45,33 @@
   /* Safe Area Insets für moderne Handys */
   .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
   .pt-safe { padding-top: env(safe-area-inset-top); }
+  
+  /* Cross-browser compatible scrollbar styling */
+  /* Standard scrollbar styling (modern browsers) */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(99, 102, 241, 0.3) transparent;
+  }
+  
+  /* Webkit scrollbar styling (Safari, older Chrome) */
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  *::-webkit-scrollbar-thumb {
+    background-color: rgba(99, 102, 241, 0.3);
+    border-radius: 3px;
+    border: none;
+  }
+  
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(99, 102, 241, 0.5);
+  }
 </style>
 </head>
 <body class="bg-[#020617] text-slate-200">
